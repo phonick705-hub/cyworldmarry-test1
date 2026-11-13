@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "GuestbookEntry": {
+      "title": "GuestbookEntry",
+      "description": "Guestbook congratulations message from guests or ilchon",
+      "type": "object",
+      "properties": {
+        "author": { "type": "string", "maxLength": 60 },
+        "authorName": { "type": "string", "maxLength": 30 },
+        "ilchonName": { "type": "string", "maxLength": 30 },
+        "emoji": { "type": "string", "maxLength": 10 },
+        "message": { "type": "string", "maxLength": 200 },
+        "authorUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "string", "maxLength": 40 },
+        "edited": { "type": "boolean" }
+      },
+      "required": ["author", "emoji", "message", "authorUid", "createdAt"]
+    },
+    "IlchonEntry": {
+      "title": "IlchonEntry",
+      "description": "Ilchon relationship entry with status pending or approved",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 30 },
+        "relationship": { "type": "string", "maxLength": 30 },
+        "ilchonName": { "type": "string", "maxLength": 30 },
+        "message": { "type": "string", "maxLength": 200 },
+        "emoji": { "type": "string", "maxLength": 10 },
+        "status": { "type": "string", "enum": ["pending", "approved"] },
+        "side": { "type": "string", "enum": ["groom", "bride", "both"] },
+        "authorUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["name", "relationship", "ilchonName", "message", "emoji", "status", "createdAt"]
+    },
+    "InvitationConfig": {
+      "title": "InvitationConfig",
+      "description": "Ceremony, wedding couple, and invitation configuration",
+      "type": "object",
+      "properties": {
+        "groom": { "type": "object" },
+        "bride": { "type": "object" },
+        "ceremony": { "type": "object" },
+        "invitation": { "type": "object" },
+        "miniroom": { "type": "object" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["groom", "bride", "ceremony"]
+    },
+    "DiaryEntry": {
+      "title": "DiaryEntry",
+      "description": "Love story timeline diary record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "maxLength": 20 },
+        "year": { "type": "string", "maxLength": 10 },
+        "title": { "type": "string", "maxLength": 100 },
+        "shortSummary": { "type": "string", "maxLength": 200 },
+        "fullStory": { "type": "string", "maxLength": 2000 },
+        "mood": { "type": "string", "maxLength": 50 },
+        "moodEmoji": { "type": "string", "maxLength": 10 },
+        "weather": { "type": "string", "maxLength": 50 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["date", "year", "title", "fullStory"]
+    },
+    "PhotoEntry": {
+      "title": "PhotoEntry",
+      "description": "Photo album photograph item",
+      "type": "object",
+      "properties": {
+        "folderId": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 80 },
+        "date": { "type": "string", "maxLength": 20 },
+        "location": { "type": "string", "maxLength": 80 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "caption": { "type": "string", "maxLength": 500 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["folderId", "title", "imageUrl"]
+    },
+    "PhotoFolder": {
+      "title": "PhotoFolder",
+      "description": "Photo album category folder",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 40 },
+        "icon": { "type": "string", "maxLength": 10 },
+        "description": { "type": "string", "maxLength": 150 },
+        "order": { "type": "number" }
+      },
+      "required": ["name", "icon"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Visitor profile with acorn balance and reward claim history",
+      "type": "object",
+      "properties": {
+        "acorns": { "type": "number", "minimum": 0 },
+        "claimed": {
+          "type": "object",
+          "properties": {
+            "welcome": { "type": "boolean" },
+            "guestbook": { "type": "boolean" },
+            "ilchon": { "type": "boolean" }
+          }
+        },
+        "answeredQuestionIds": { "type": "array" },
+        "quizDaily": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string" },
+            "earned": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["acorns", "claimed"]
+    },
+    "QuizQuestion": {
+      "title": "QuizQuestion",
+      "description": "Couple quiz multiple choice question and explanation",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string", "maxLength": 200 },
+        "options": { "type": "array" },
+        "answerIndex": { "type": "number" },
+        "explanation": { "type": "string", "maxLength": 500 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["question", "options", "answerIndex", "explanation"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Visitor acorn balance and claim status"
+    },
+    "/quizQuestions/{questionId}": {
+      "schema": { "$ref": "#/entities/QuizQuestion" },
+      "description": "Couple quiz questions repository"
+    },
+    "/guestbook/{entryId}": {
+      "schema": { "$ref": "#/entities/GuestbookEntry" },
+      "description": "Collection of wedding guestbook entries"
+    },
+    "/ilchon/{ilchonId}": {
+      "schema": { "$ref": "#/entities/IlchonEntry" },
+      "description": "Collection of ilchon friends and family entries"
+    },
+    "/invitation/{configId}": {
+      "schema": { "$ref": "#/entities/InvitationConfig" },
+      "description": "Singleton configuration document for wedding information"
+    },
+    "/diary/{diaryId}": {
+      "schema": { "$ref": "#/entities/DiaryEntry" },
+      "description": "Collection of love story diary articles"
+    },
+    "/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/PhotoEntry" },
+      "description": "Collection of wedding and memory photos"
+    },
+    "/photoFolders/{folderId}": {
+      "schema": { "$ref": "#/entities/PhotoFolder" },
+      "description": "Collection of photo album folders"
+    }
+  }
+}

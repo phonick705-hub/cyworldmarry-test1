@@ -1,0 +1,6 @@
+{
+  "name": "싸이월드 감성 모바일 청첩장",
+  "description": "2000년대 싸이월드 미니홈피 감성의 레트로 픽셀 모바일 청첩장. 미니룸, 사진첩, 다이어리, 방명록, 일촌평 완벽 구현.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

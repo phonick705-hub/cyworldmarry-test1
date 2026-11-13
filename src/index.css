@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'NeoDunggeunmo';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@2.1/NeoDunggeunmo.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --color-cy-beige: #F5EFE4;
+  --color-cy-brown: #3B2F2F;
+  --color-cy-blue: #2E8BFF;
+  --color-cy-pink: #F4A6B7;
+}
+
+/* Pixel and Body Typography */
+.font-pixel {
+  font-family: 'NeoDunggeunmo', 'Galmuri11', monospace;
+  letter-spacing: -0.02em;
+}
+
+.font-body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* Retro Cyworld Card & Box Styles */
+.retro-box {
+  border: 3px solid #3B2F2F;
+  box-shadow: 4px 4px 0px #3B2F2F;
+  border-radius: 8px;
+  background-color: #FFFFFF;
+}
+
+.retro-box-cream {
+  border: 3px solid #3B2F2F;
+  box-shadow: 4px 4px 0px #3B2F2F;
+  border-radius: 8px;
+  background-color: #FDFBF7;
+}
+
+.retro-btn {
+  border: 2px solid #3B2F2F;
+  box-shadow: 3px 3px 0px #3B2F2F;
+  border-radius: 6px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  user-select: none;
+}
+
+.retro-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #3B2F2F;
+}
+
+.retro-btn-blue {
+  border: 2px solid #3B2F2F;
+  box-shadow: 3px 3px 0px #3B2F2F;
+  background-color: #2E8BFF;
+  color: #FFFFFF;
+  border-radius: 6px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.retro-btn-blue:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #3B2F2F;
+}
+
+/* Subtle grid paper background */
+.bg-grid-paper {
+  background-color: #F5EFE4;
+  background-image: 
+    linear-gradient(#e5dbc9 1px, transparent 1px),
+    linear-gradient(90deg, #e5dbc9 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Dot paper pattern */
+.bg-dot-paper {
+  background-color: #ECE3D2;
+  background-image: radial-gradient(#d3c6af 1.5px, transparent 1.5px);
+  background-size: 14px 14px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f5efe4;
+}
+::-webkit-scrollbar-thumb {
+  background: #c7baa7;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3B2F2F;
+}
+
+/* Pixel character idle bobbing keyframes */
+@keyframes miniroom-idle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.animate-idle {
+  animation: miniroom-idle 2.4s ease-in-out infinite;
+}
+
+/* Floating heart animation */
+@keyframes float-heart {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tw-tx, 0px), -60px) scale(1.3);
+  }
+}
+
+.animate-float-heart {
+  animation: float-heart 1.2s forwards cubic-bezier(0.16, 1, 0.3, 1);
+}

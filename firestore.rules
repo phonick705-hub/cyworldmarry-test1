@@ -1,0 +1,170 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Admin authorization check based on configured admin emails
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'phonick705@gmail.com' ||
+        request.auth.token.email == 'admin@wedding.com'
+      );
+    }
+
+    // Users Collection (Acorn Balance & Claimed Rewards per Visitor)
+    match /users/{userId} {
+      // Only the user themselves or admin can read their own profile
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      // Only the user themselves can create their profile (initial balance: 0 or welcome bonus 5)
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && incoming().acorns is number
+        && incoming().acorns >= 0
+        && (incoming().acorns == 0 || incoming().acorns == 5)
+        && incoming().claimed is map;
+
+      // Only the user themselves can update acorns (cannot decrease, delta must be 0, 5, or 10)
+      // quizDaily.earned cannot exceed 20
+      allow update: if isSignedIn()
+        && (
+          (request.auth.uid == userId
+            && incoming().acorns is number
+            && incoming().acorns >= 0
+            && (incoming().acorns - existing().acorns in [0, 5, 10])
+            && (!('quizDaily' in incoming()) || (
+                incoming().quizDaily.earned is number
+                && incoming().quizDaily.earned >= 0
+                && incoming().quizDaily.earned <= 20
+              ))
+            && incoming().claimed is map)
+          || isAdmin()
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // Quiz Questions Collection (Couple Quiz)
+    match /quizQuestions/{questionId} {
+      // Anyone can read quiz questions to play the quiz
+      allow read: if true;
+
+      // Only admins can create, update, or delete quiz questions
+      allow create: if isAdmin()
+        && incoming().question is string
+        && incoming().question.size() > 0
+        && incoming().options is list
+        && incoming().options.size() == 4
+        && incoming().answerIndex is number
+        && incoming().answerIndex >= 0
+        && incoming().answerIndex <= 3
+        && incoming().explanation is string;
+
+      allow update: if isAdmin()
+        && incoming().question is string
+        && incoming().question.size() > 0
+        && incoming().options is list
+        && incoming().options.size() == 4
+        && incoming().answerIndex is number
+        && incoming().answerIndex >= 0
+        && incoming().answerIndex <= 3
+        && incoming().explanation is string;
+
+      allow delete: if isAdmin();
+    }
+
+    // Guestbook Collection Rules
+    match /guestbook/{entryId} {
+      // Anyone can read guestbook entries
+      allow read: if true;
+
+      // Authenticated users (including anonymous visitors) can create entries with their own uid
+      allow create: if isSignedIn()
+        && incoming().authorUid == request.auth.uid
+        && incoming().message is string
+        && incoming().message.size() > 0
+        && incoming().message.size() <= 200
+        && incoming().author is string
+        && incoming().author.size() <= 60
+        && incoming().emoji is string
+        && incoming().emoji.size() <= 10;
+
+      // Author can update message, emoji, authorName, updatedAt, edited (authorUid and createdAt cannot change)
+      // Admins can also update
+      allow update: if (
+        isSignedIn()
+        && existing().authorUid == request.auth.uid
+        && incoming().authorUid == existing().authorUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().message is string
+        && incoming().message.size() > 0
+        && incoming().message.size() <= 200
+      ) || isAdmin();
+
+      // Author or Admin can delete
+      allow delete: if (
+        isSignedIn() && existing().authorUid == request.auth.uid
+      ) || isAdmin();
+    }
+
+    // Ilchon Collection Rules
+    match /ilchon/{ilchonId} {
+      // General visitors can only read approved ilchons; admins can read all (including pending)
+      allow read: if resource.data.status == 'approved' || isAdmin();
+
+      // Visitors can request ilchon, always with 'pending' status
+      allow create: if incoming().status == 'pending'
+        && incoming().name is string
+        && incoming().name.size() > 0
+        && incoming().name.size() <= 50
+        && incoming().message is string
+        && incoming().message.size() <= 200;
+
+      // Only admins can approve, edit, or delete ilchons
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Invitation, Ceremony & Miniroom Singleton Configuration
+    match /invitation/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Diary Timeline Collection
+    match /diary/{diaryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Photo Album Photos Collection
+    match /photos/{photoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Photo Album Folders Collection
+    match /photoFolders/{folderId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
