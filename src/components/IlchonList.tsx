@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, UserPlus, Sparkles, Check, Trash2, Clock, X, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { ensureAnonymousAuth } from '../services/firebase';
 import { 
   WeddingDataService, 
   FirestoreIlchonItem 
@@ -12,16 +13,18 @@ import { AcornService } from '../services/acornService';
 interface IlchonListProps {
   onShowToast: (msg: string) => void;
   onGoToGuestbook?: () => void;
+  onGoToStore?: () => void;
 }
 
-export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
+export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore }) => {
   const { isAdmin, currentUser } = useAuth();
   const [approvedList, setApprovedList] = useState<FirestoreIlchonItem[]>([]);
   const [pendingList, setPendingList] = useState<FirestoreIlchonItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'groom' | 'bride'>('all');
 
-  // Application Modal state
+  // Application Modal & Centered Notice Modal state
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [showSubmittedNotice, setShowSubmittedNotice] = useState(false);
   const [name, setName] = useState('');
   const [relationship, setRelationship] = useState('');
   const [ilchonName, setIlchonName] = useState('');
@@ -58,7 +61,17 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
 
     setIsSubmitting(true);
     try {
-      // 1. Submit ilchon request
+      let uid = currentUser?.uid;
+      if (!uid) {
+        try {
+          const anonUser = await ensureAnonymousAuth();
+          uid = anonUser.uid;
+        } catch {
+          // Proceed even if auth check falls back
+        }
+      }
+
+      // 1. Submit ilchon request (pending admin approval)
       await WeddingDataService.requestIlchon({
         name: name.trim(),
         relationship: relationship.trim(),
@@ -68,14 +81,8 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
         side,
       });
 
-      // 2. Automatically post to Guestbook
-      await WeddingDataService.addGuestbook({
-        authorName: name.trim(),
-        ilchonName: ilchonName.trim(),
-        emoji,
-        message: message.trim(),
-        authorUid: currentUser?.uid || 'anon',
-      });
+      // 2. Unlock "도토리 받기" button in Dotori Store (without auto-claiming)
+      await AcornService.unlockIlchonReward(uid || '');
 
       bgmPlayer.playChime();
       setShowApplyModal(false);
@@ -83,15 +90,7 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
       setRelationship('');
       setIlchonName('');
       setMessage('');
-      onShowToast('일촌 신청 완료! 방명록에도 함께 등록되었어요 💌');
-
-      // Check and claim ilchon & guestbook rewards
-      if (currentUser?.uid) {
-        setTimeout(() => {
-          AcornService.claimIlchonReward(currentUser.uid, onShowToast);
-          AcornService.claimGuestbookReward(currentUser.uid, () => {});
-        }, 1200);
-      }
+      setShowSubmittedNotice(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '일촌 신청에 실패했습니다.';
       onShowToast(msg);
@@ -100,11 +99,22 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
     }
   };
 
-  const handleApprove = async (id: string) => {
+  const handleApprove = async (item: FirestoreIlchonItem) => {
     try {
-      await WeddingDataService.approveIlchon(id);
+      // 1. Approve ilchon
+      await WeddingDataService.approveIlchon(item.id);
+
+      // 2. Automatically upload celebration message to Guestbook when ilchon is approved
+      await WeddingDataService.addGuestbook({
+        authorName: item.name,
+        ilchonName: item.ilchonName,
+        emoji: item.emoji || '🤝',
+        message: item.message,
+        authorUid: item.authorUid || currentUser?.uid || 'admin',
+      });
+
       bgmPlayer.playChime();
-      onShowToast('일촌 신청이 승인되었습니다! 🎉');
+      onShowToast('일촌이 맺어져 방명록에도 축하 메시지가 등록되었습니다! 🎉');
     } catch (e) {
       console.error(e);
       onShowToast('승인 처리에 실패했습니다.');
@@ -204,7 +214,7 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
                       <span>거절(삭제)</span>
                     </button>
                     <button
-                      onClick={() => handleApprove(item.id)}
+                      onClick={() => handleApprove(item)}
                       className="retro-btn bg-[#2E8BFF] text-white px-2.5 py-0.5 text-[10px] font-pixel flex items-center gap-0.5 cursor-pointer"
                     >
                       <Check className="w-3 h-3" />
@@ -383,7 +393,7 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
             </div>
 
             <div className="bg-[#EBF4FF] p-2 rounded border border-[#2E8BFF] text-[11px] font-pixel text-[#1C74E0]">
-              💡 일촌 신청 시 작성하신 축하 한마디는 방명록에 자동으로 함께 등록됩니다 💌
+              💡 일촌이 맺어지면(승인 후) 작성하신 축하 한마디가 방명록에 자동으로 등록됩니다 💌
             </div>
 
             <form onSubmit={handleApplySubmit} className="space-y-2.5 text-xs">
@@ -509,6 +519,52 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Centered Confirmation Modal after Ilchon Application */}
+      {showSubmittedNotice && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="retro-box bg-white max-w-sm w-full p-5 space-y-4 text-center shadow-[6px_6px_0_#2E8BFF]">
+            <div className="w-12 h-12 mx-auto rounded-full bg-[#FFF0F4] border-2 border-[#F4A6B7] flex items-center justify-center text-2xl shadow-[2px_2px_0_#3B2F2F]">
+              💌
+            </div>
+
+            <div className="space-y-2">
+              <p className="font-pixel text-sm sm:text-base font-bold text-[#3B2F2F] leading-relaxed">
+                신랑·신부가 일촌을 확인하고 있어요!
+                <br />
+                일촌이 맺어지면 자동으로 방명록에
+                <br />
+                축하 메세지가 업로드 돼요❤️
+              </p>
+              <div className="bg-[#FFF8E7] border border-[#FFD8A8] rounded px-3 py-2 text-[11px] font-pixel text-[#D9480F]">
+                🌰 도토리 상점에서 ‘소중한 인연 일촌 신청하기’ 도토리를 받으실 수 있어요!
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              {onGoToStore && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSubmittedNotice(false);
+                    onGoToStore();
+                  }}
+                  className="retro-btn-blue py-2.5 text-xs font-pixel flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>🌰 도토리 받으러 가기</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowSubmittedNotice(false)}
+                className="retro-btn bg-[#FAF7F0] hover:bg-[#F2ECE0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
+              >
+                확인
+              </button>
+            </div>
           </div>
         </div>
       )}

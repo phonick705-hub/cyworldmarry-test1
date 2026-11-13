@@ -15,13 +15,13 @@ export const TabBar: React.FC<TabBarProps> = ({
   onChangeTab,
   guestbookCount,
 }) => {
-  const tabs = [
-    { id: 'invitation' as TabType, label: '초대장', icon: Mail },
-    { id: 'photos' as TabType, label: '사진첩', icon: Camera },
-    { id: 'diary' as TabType, label: '다이어리', icon: BookOpen },
-    { id: 'ilchon' as TabType, label: '일촌', icon: Users },
-    { id: 'guestbook' as TabType, label: '방명록', icon: MessageSquare, badge: guestbookCount },
-    { id: 'store' as TabType, label: '도토리', icon: Store },
+  const tabs: Array<{ id: TabType; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }> = [
+    { id: 'invitation', label: '초대장', icon: Mail },
+    { id: 'photos', label: '사진첩', icon: Camera },
+    { id: 'diary', label: '다이어리', icon: BookOpen },
+    { id: 'ilchon', label: '일촌', icon: Users },
+    { id: 'guestbook', label: '방명록', icon: MessageSquare },
+    { id: 'store', label: '도토리', icon: Store },
   ];
 
   const handleTabClick = (tabId: TabType) => {

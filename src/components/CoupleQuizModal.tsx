@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
-  Sparkles, 
   CheckCircle2, 
   XCircle, 
   RefreshCw, 
@@ -10,13 +9,14 @@ import {
   Plus, 
   X, 
   AlertTriangle,
-  HelpCircle,
   Award
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { ensureAnonymousAuth } from '../services/firebase';
 import { QuizQuestion, ACORN_CONFIG } from '../config/weddingConfig';
 import { WeddingDataService } from '../services/weddingDataService';
-import { AcornService, UserAcornProfile } from '../services/acornService';
+import { AcornService } from '../services/acornService';
+import { bgmPlayer } from '../utils/soundSynthesizer';
 
 interface CoupleQuizModalProps {
   isOpen: boolean;
@@ -37,10 +37,6 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
 }) => {
   const { isAdmin, currentUser } = useAuth();
   const [allQuestions, setAllQuestions] = useState<QuizQuestion[]>([]);
-  const [userProfile, setUserProfile] = useState<UserAcornProfile>({
-    acorns: 0,
-    claimed: {},
-  });
 
   // Game Play State
   const [roundQuestions, setRoundQuestions] = useState<ShuffledQuestion[]>([]);
@@ -48,11 +44,12 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState<boolean>(false);
   const [score, setScore] = useState<number>(0);
+  const [correctQuestionIds, setCorrectQuestionIds] = useState<string[]>([]);
   const [earnedInRound, setEarnedInRound] = useState<number>(0);
+  const [rewardNotice, setRewardNotice] = useState<'success' | 'daily_limit' | 'no_correct' | null>(null);
+  const [isSavingReward, setIsSavingReward] = useState<boolean>(false);
   const [isRoundFinished, setIsRoundFinished] = useState<boolean>(false);
   const [shakeIncorrect, setShakeIncorrect] = useState<boolean>(false);
-  const [lastQuestionIds, setLastQuestionIds] = useState<string[]>([]);
-  const [currentRewardStatus, setCurrentRewardStatus] = useState<string | null>(null);
 
   // Admin Question Editor State
   const [showAdminEditor, setShowAdminEditor] = useState<boolean>(false);
@@ -72,16 +69,17 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Subscribe to current user's acorn profile
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    const unsubscribe = AcornService.subscribeUserAcorns(currentUser.uid, (data) => {
-      setUserProfile(data);
-    });
-    return () => unsubscribe();
-  }, [currentUser?.uid]);
+  // Fisher-Yates shuffle helper
+  const shuffleArray = <T,>(arr: T[]): T[] => {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
 
-  // Helper to shuffle questions and options
+  // Pick 4 random questions and shuffle their options
   const startNewRound = () => {
     if (allQuestions.length === 0) {
       setRoundQuestions([]);
@@ -89,35 +87,15 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
     }
 
     const roundCount = Math.min(ACORN_CONFIG.QUIZ_QUESTIONS_PER_ROUND, allQuestions.length);
-    const answeredIds = userProfile.answeredQuestionIds || [];
+    const chosenQuestions = shuffleArray(allQuestions).slice(0, roundCount);
 
-    // Prioritize unrewarded questions
-    const unrewarded = allQuestions.filter((q) => !answeredIds.includes(q.id));
-    const rewarded = allQuestions.filter((q) => answeredIds.includes(q.id));
-
-    // Also prioritize questions not used in the immediately preceding round
-    const sortPool = (list: QuizQuestion[]) => {
-      return [...list].sort((a, b) => {
-        const aUsed = lastQuestionIds.includes(a.id);
-        const bUsed = lastQuestionIds.includes(b.id);
-        if (aUsed && !bUsed) return 1;
-        if (!aUsed && bUsed) return -1;
-        return Math.random() - 0.5;
-      });
-    };
-
-    const prioritizedPool = [...sortPool(unrewarded), ...sortPool(rewarded)];
-    const chosenQuestions = prioritizedPool.slice(0, roundCount);
-
-    // Shuffle options for each chosen question without mutating original DB question
     const prepared: ShuffledQuestion[] = chosenQuestions.map((q) => {
       const optionsWithMeta = q.options.map((opt, originalIdx) => ({
         text: opt,
         isCorrect: originalIdx === q.answerIndex,
       }));
 
-      // Shuffle options array
-      const shuffled = [...optionsWithMeta].sort(() => Math.random() - 0.5);
+      const shuffled = shuffleArray(optionsWithMeta);
       const correctShuffledIndex = shuffled.findIndex((item) => item.isCorrect);
 
       return {
@@ -127,21 +105,24 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
       };
     });
 
-    setLastQuestionIds(chosenQuestions.map((q) => q.id));
     setRoundQuestions(prepared);
     setCurrentIndex(0);
     setSelectedOption(null);
     setIsAnswered(false);
     setScore(0);
+    setCorrectQuestionIds([]);
     setEarnedInRound(0);
+    setRewardNotice(null);
     setIsRoundFinished(false);
-    setCurrentRewardStatus(null);
   };
 
-  // Start a new round whenever modal opens or questions become available
+  // Start a fresh random 4-question round whenever the modal opens
   useEffect(() => {
-    if (isOpen && allQuestions.length > 0 && roundQuestions.length === 0) {
+    if (isOpen && allQuestions.length > 0) {
       startNewRound();
+    }
+    if (!isOpen) {
+      setRoundQuestions([]);
     }
   }, [isOpen, allQuestions.length]);
 
@@ -149,7 +130,7 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
 
   const currentQ = roundQuestions[currentIndex];
 
-  const handleSelectOption = async (optionIndex: number) => {
+  const handleSelectOption = (optionIndex: number) => {
     if (isAnswered || !currentQ) return;
 
     setSelectedOption(optionIndex);
@@ -159,38 +140,47 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
-
-      // Attempt to reward acorns
-      if (currentUser?.uid) {
-        const rewardResult = await AcornService.recordQuizCorrectAnswer(
-          currentUser.uid,
-          currentQ.question.id
-        );
-
-        if (rewardResult.rewarded) {
-          setEarnedInRound((prev) => prev + rewardResult.earnedDelta);
-          setCurrentRewardStatus('rewarded');
-        } else if (rewardResult.reason === 'already_answered') {
-          setCurrentRewardStatus('already_answered');
-        } else if (rewardResult.reason === 'daily_limit') {
-          setCurrentRewardStatus('daily_limit');
-        }
-      }
+      setCorrectQuestionIds((prev) => [...prev, currentQ.question.id]);
     } else {
       setShakeIncorrect(true);
       setTimeout(() => setShakeIncorrect(false), 500);
-      setCurrentRewardStatus(null);
     }
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     if (currentIndex + 1 < roundQuestions.length) {
       setCurrentIndex((prev) => prev + 1);
       setSelectedOption(null);
       setIsAnswered(false);
-      setCurrentRewardStatus(null);
     } else {
-      setIsRoundFinished(true);
+      // Finished all 4 questions: award acorns based on correct count
+      if (isSavingReward) return;
+      setIsSavingReward(true);
+      try {
+        let uid = currentUser?.uid || '';
+        if (!uid) {
+          try {
+            const anonUser = await ensureAnonymousAuth();
+            uid = anonUser.uid;
+          } catch {
+            // Proceed with guest local profile fallback
+          }
+        }
+
+        const result = await AcornService.recordQuizRoundReward(uid, correctQuestionIds);
+        setEarnedInRound(result.earnedDelta);
+        setRewardNotice(result.reason || 'no_correct');
+
+        if (result.rewarded && result.earnedDelta > 0) {
+          bgmPlayer.playChime();
+          onShowToast(`🌰 +${result.earnedDelta} 도토리가 적립되었어요!`);
+        }
+      } catch (err) {
+        console.error('Failed to record quiz round reward:', err);
+      } finally {
+        setIsSavingReward(false);
+        setIsRoundFinished(true);
+      }
     }
   };
 
@@ -354,9 +344,14 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
                   <span>이번 판에 적립된 도토리:</span>
                   <span className="text-base">+{earnedInRound} 🌰</span>
                 </div>
-                {earnedInRound === 0 && (
+                {rewardNotice === 'daily_limit' && (
                   <p className="text-[11px] text-[#888888] font-body">
-                    (이미 적립받은 문제이거나 하루 최대 한도 20🌰에 도달했어요)
+                    (오늘 하루 최대 한도 20🌰을 이미 모두 적립했어요)
+                  </p>
+                )}
+                {rewardNotice === 'no_correct' && (
+                  <p className="text-[11px] text-[#888888] font-body">
+                    아쉽게도 맞춘 문제가 없어요. 다시 도전해보세요!
                   </p>
                 )}
                 {/* Strict User Constraint: Do NOT show total balance, guide to store */}
@@ -474,22 +469,6 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
                         <span className="font-pixel font-bold text-[#2E8BFF]">
                           💡 정답 설명
                         </span>
-                        {/* Status tag */}
-                        {currentRewardStatus === 'rewarded' && (
-                          <span className="bg-[#EBFBEE] text-[#2B8A3E] border border-[#B2F2BB] text-[10px] px-1.5 py-0.2 rounded font-pixel font-bold">
-                            +5 🌰 적립 완료!
-                          </span>
-                        )}
-                        {currentRewardStatus === 'already_answered' && (
-                          <span className="bg-[#F1F3F5] text-[#868E96] border border-[#CED4DA] text-[10px] px-1.5 py-0.2 rounded font-pixel">
-                            이미 받은 문제예요
-                          </span>
-                        )}
-                        {currentRewardStatus === 'daily_limit' && (
-                          <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded font-pixel">
-                            오늘 상한(20🌰) 도달
-                          </span>
-                        )}
                       </div>
                       <p className="font-body text-[#3B2F2F] leading-relaxed">
                         {currentQ.question.explanation}
@@ -498,12 +477,17 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
 
                     <button
                       onClick={handleNextQuestion}
-                      className="w-full retro-btn-blue py-2.5 text-xs font-pixel flex items-center justify-center gap-1 cursor-pointer"
+                      disabled={isSavingReward}
+                      className="w-full retro-btn-blue py-2.5 text-xs font-pixel flex items-center justify-center gap-1 cursor-pointer disabled:opacity-60"
                     >
                       <span>
-                        {currentIndex + 1 === roundQuestions.length ? '결과 보기' : '다음 문제'}
+                        {isSavingReward
+                          ? '도토리 적립 중...'
+                          : currentIndex + 1 === roundQuestions.length
+                          ? '결과 보기'
+                          : '다음 문제'}
                       </span>
-                      <span>›</span>
+                      {!isSavingReward && <span>›</span>}
                     </button>
                   </div>
                 )}

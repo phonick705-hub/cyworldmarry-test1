@@ -34,22 +34,22 @@ service cloud.firestore {
       // Only the user themselves or admin can read their own profile
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
 
-      // Only the user themselves can create their profile (initial balance: 0 or welcome bonus 5)
+      // Only the user themselves can create their profile (initial balance: 0, 5, 10, 15, or 20)
       allow create: if isSignedIn()
         && request.auth.uid == userId
         && incoming().acorns is number
         && incoming().acorns >= 0
-        && (incoming().acorns == 0 || incoming().acorns == 5)
+        && (incoming().acorns in [0, 5, 10, 15, 20])
         && incoming().claimed is map;
 
-      // Only the user themselves can update acorns (cannot decrease, delta must be 0, 5, or 10)
+      // Only the user themselves can update acorns (cannot decrease, delta must be 0, 5, 10, 15, or 20)
       // quizDaily.earned cannot exceed 20
       allow update: if isSignedIn()
         && (
           (request.auth.uid == userId
             && incoming().acorns is number
             && incoming().acorns >= 0
-            && (incoming().acorns - existing().acorns in [0, 5, 10])
+            && (incoming().acorns - existing().acorns in [0, 5, 10, 15, 20])
             && (!('quizDaily' in incoming()) || (
                 incoming().quizDaily.earned is number
                 && incoming().quizDaily.earned >= 0
@@ -96,9 +96,9 @@ service cloud.firestore {
       // Anyone can read guestbook entries
       allow read: if true;
 
-      // Authenticated users (including anonymous visitors) can create entries with their own uid
+      // Authenticated users can create entries with their own uid; admins can also post approved ilchon messages
       allow create: if isSignedIn()
-        && incoming().authorUid == request.auth.uid
+        && (incoming().authorUid == request.auth.uid || isAdmin())
         && incoming().message is string
         && incoming().message.size() > 0
         && incoming().message.size() <= 200

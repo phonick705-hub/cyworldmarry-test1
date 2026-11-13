@@ -23,17 +23,14 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
   });
   const [loading, setLoading] = useState(true);
   const [isClaimingWelcome, setIsClaimingWelcome] = useState(false);
+  const [isClaimingIlchon, setIsClaimingIlchon] = useState(false);
   const [showQuizModal, setShowQuizModal] = useState(false);
 
   useEffect(() => {
     if (!isAuthReady) return;
-    if (!currentUser?.uid) {
-      setLoading(false);
-      return;
-    }
 
-    // Subscribe to real-time acorn balance
-    const unsubscribe = AcornService.subscribeUserAcorns(currentUser.uid, (data) => {
+    // Subscribe to real-time acorn balance (Firestore + local fallback)
+    const unsubscribe = AcornService.subscribeUserAcorns(currentUser?.uid || '', (data) => {
       setProfile(data);
       setLoading(false);
     });
@@ -45,19 +42,43 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
     if (isClaimingWelcome || profile.claimed?.welcome) return;
     setIsClaimingWelcome(true);
     try {
-      let uid = currentUser?.uid;
+      let uid = currentUser?.uid || '';
       if (!uid) {
-        const user = await ensureAnonymousAuth();
-        uid = user.uid;
+        try {
+          const user = await ensureAnonymousAuth();
+          uid = user.uid;
+        } catch {
+          // Proceed with guest local profile fallback
+        }
       }
-      if (uid) {
-        await AcornService.claimWelcomeReward(uid, onShowToast);
-      }
+      await AcornService.claimWelcomeReward(uid, onShowToast);
     } catch (err) {
       console.error('Welcome reward claim failed:', err);
       onShowToast('도토리 받기에 실패했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsClaimingWelcome(false);
+    }
+  };
+
+  const handleClaimIlchon = async () => {
+    if (isClaimingIlchon || profile.claimed?.ilchon || !profile.eligible?.ilchon) return;
+    setIsClaimingIlchon(true);
+    try {
+      let uid = currentUser?.uid || '';
+      if (!uid) {
+        try {
+          const user = await ensureAnonymousAuth();
+          uid = user.uid;
+        } catch {
+          // Proceed with guest local profile fallback
+        }
+      }
+      await AcornService.claimIlchonReward(uid, onShowToast);
+    } catch (err) {
+      console.error('Ilchon reward claim failed:', err);
+      onShowToast('도토리 받기에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsClaimingIlchon(false);
     }
   };
 
@@ -72,6 +93,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
       title: '첫 방문 입장 축하 선물',
       reward: ACORN_CONFIG.WELCOME_REWARD,
       isCompleted: !!profile.claimed?.welcome,
+      isEligible: true,
       actionText: null,
       onAction: null,
     },
@@ -80,6 +102,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
       title: '소중한 인연 일촌 신청하기',
       reward: ACORN_CONFIG.ILCHON_REWARD,
       isCompleted: !!profile.claimed?.ilchon,
+      isEligible: !!profile.eligible?.ilchon,
       actionText: '일촌 신청하러가기',
       onAction: () => onNavigateTab('ilchon'),
     },
@@ -88,6 +111,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
       title: '신랑·신부에게 축하 방명록 남기기',
       reward: ACORN_CONFIG.GUESTBOOK_REWARD,
       isCompleted: !!profile.claimed?.guestbook,
+      isEligible: false,
       actionText: '방명록 쓰러가기',
       onAction: () => onNavigateTab('guestbook'),
     },
@@ -180,7 +204,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                     +{mission.reward} 🌰
                   </span>
                 </div>
-                {mission.actionText && !mission.isCompleted && mission.onAction && (
+                {mission.actionText && !mission.isCompleted && !mission.isEligible && mission.onAction && (
                   <button
                     onClick={mission.onAction}
                     className="text-[11px] text-[#2E8BFF] hover:underline flex items-center gap-0.5 font-body pt-0.5 cursor-pointer"
@@ -195,10 +219,14 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
               <div className="shrink-0">
                 {mission.id === 'welcome' ? (
                   mission.isCompleted ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-[#2B8A3E] font-bold bg-[#EBFBEE] border border-[#B2F2BB] px-2 py-1 rounded">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#40C057]" />
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
                       <span>도토리 수령</span>
-                    </span>
+                    </button>
                   ) : (
                     <button
                       onClick={handleClaimWelcome}
@@ -209,11 +237,44 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                       <span>{isClaimingWelcome ? '받는 중...' : '도토리 받기'}</span>
                     </button>
                   )
+                ) : mission.id === 'ilchon' ? (
+                  mission.isCompleted ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
+                      <span>도토리 수령</span>
+                    </button>
+                  ) : mission.isEligible ? (
+                    <button
+                      onClick={handleClaimIlchon}
+                      disabled={isClaimingIlchon}
+                      className="retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] disabled:opacity-60 text-white px-2.5 py-1 text-[11px] font-pixel flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <Gift className="w-3.5 h-3.5" />
+                      <span>{isClaimingIlchon ? '받는 중...' : '도토리 받기'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-1 text-[11px] text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed opacity-75"
+                    >
+                      <Gift className="w-3.5 h-3.5 text-[#ADB5BD]" />
+                      <span>도토리 받기</span>
+                    </button>
+                  )
                 ) : mission.isCompleted ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-[#2B8A3E] font-bold bg-[#EBFBEE] border border-[#B2F2BB] px-2 py-1 rounded">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#40C057]" />
-                    <span>완료됨</span>
-                  </span>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
+                    <span>도토리 수령</span>
+                  </button>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[#868E96] bg-[#F1F3F5] border border-[#CED4DA] px-2 py-1 rounded">
                     <Clock className="w-3.5 h-3.5 text-[#ADB5BD]" />
@@ -235,19 +296,12 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
             <div className="space-y-0.5 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[#3B2F2F] font-bold">
-                  커플 퀴즈 풀기 +5 🌰
+                  커플 퀴즈 풀기
                 </span>
-                <span className="bg-[#EBF4FF] text-[#2E8BFF] border border-[#B6D4FE] text-[10px] px-1.5 py-0.2 rounded font-bold">
-                  매일 퀴즈
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
+                  최대 +{ACORN_CONFIG.QUIZ_DAILY_MAX} 🌰
                 </span>
               </div>
-              <button
-                onClick={() => setShowQuizModal(true)}
-                className="text-[11px] text-[#2E8BFF] hover:underline flex items-center gap-0.5 font-body pt-0.5 cursor-pointer"
-              >
-                <span>게임하러 가기</span>
-                <ChevronRight className="w-3 h-3" />
-              </button>
             </div>
 
             {/* Status Button: "도전하기" or "오늘 완료" */}

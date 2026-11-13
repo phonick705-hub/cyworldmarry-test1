@@ -92,11 +92,9 @@ export const Guestbook: React.FC<GuestbookProps> = ({ onShowToast, onEntryAdded,
       }
 
       // Check and claim first guestbook acorn reward (+10 acorns)
-      if (currentUser?.uid) {
-        setTimeout(() => {
-          AcornService.claimGuestbookReward(currentUser.uid, onShowToast);
-        }, 1200);
-      }
+      setTimeout(() => {
+        AcornService.claimGuestbookReward(currentUser?.uid || '', onShowToast);
+      }, 1200);
     } catch (err: unknown) {
       console.error(err);
       onShowToast('방명록 등록에 실패했습니다. 다시 시도해주세요.');

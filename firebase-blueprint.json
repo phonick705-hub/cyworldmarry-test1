@@ -109,6 +109,13 @@
             "ilchon": { "type": "boolean" }
           }
         },
+        "eligible": {
+          "type": "object",
+          "properties": {
+            "ilchon": { "type": "boolean" },
+            "guestbook": { "type": "boolean" }
+          }
+        },
         "answeredQuestionIds": { "type": "array" },
         "quizDaily": {
           "type": "object",

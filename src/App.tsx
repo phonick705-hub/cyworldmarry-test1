@@ -166,6 +166,7 @@ function MainApp() {
               >
                 <IlchonList
                   onGoToGuestbook={() => setActiveTab('guestbook')}
+                  onGoToStore={() => setActiveTab('store')}
                   onShowToast={showToast}
                 />
               </motion.div>
