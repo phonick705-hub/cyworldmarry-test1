@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, UserPlus, Sparkles, Check, Trash2, Clock, X, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ensureAnonymousAuth } from '../services/firebase';
 import { 
   WeddingDataService, 
   FirestoreIlchonItem 
@@ -41,16 +40,21 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
       setApprovedList(items);
     });
 
-    // 2. Subscribe to pending ilchons for admin review
-    const unsubPending = WeddingDataService.subscribePendingIlchons((items) => {
-      setPendingList(items);
-    });
+    // 2. Subscribe to pending ilchons ONLY for admin review
+    let unsubPending = () => {};
+    if (isAdmin) {
+      unsubPending = WeddingDataService.subscribePendingIlchons((items) => {
+        setPendingList(items);
+      });
+    } else {
+      setPendingList([]);
+    }
 
     return () => {
       unsubApproved();
       unsubPending();
     };
-  }, []);
+  }, [isAdmin]);
 
   const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,15 +65,7 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
 
     setIsSubmitting(true);
     try {
-      let uid = currentUser?.uid;
-      if (!uid) {
-        try {
-          const anonUser = await ensureAnonymousAuth();
-          uid = anonUser.uid;
-        } catch {
-          // Proceed even if auth check falls back
-        }
-      }
+      const uid = currentUser?.uid || '';
 
       // 1. Submit ilchon request (pending admin approval)
       await WeddingDataService.requestIlchon({

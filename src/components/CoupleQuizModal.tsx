@@ -12,7 +12,6 @@ import {
   Award
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ensureAnonymousAuth } from '../services/firebase';
 import { QuizQuestion, ACORN_CONFIG } from '../config/weddingConfig';
 import { WeddingDataService } from '../services/weddingDataService';
 import { AcornService } from '../services/acornService';
@@ -157,16 +156,7 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
       if (isSavingReward) return;
       setIsSavingReward(true);
       try {
-        let uid = currentUser?.uid || '';
-        if (!uid) {
-          try {
-            const anonUser = await ensureAnonymousAuth();
-            uid = anonUser.uid;
-          } catch {
-            // Proceed with guest local profile fallback
-          }
-        }
-
+        const uid = currentUser?.uid || '';
         const result = await AcornService.recordQuizRoundReward(uid, correctQuestionIds);
         setEarnedInRound(result.earnedDelta);
         setRewardNotice(result.reason || 'no_correct');

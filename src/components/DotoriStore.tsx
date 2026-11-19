@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, Clock, Sparkles, ChevronRight, Store, Gift, Gamepad2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Sparkles,
+  ChevronRight,
+  Store,
+  Gift,
+  Gamepad2,
+  ShoppingBag,
+  Frame,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ensureAnonymousAuth } from '../services/firebase';
 import { AcornService, UserAcornProfile } from '../services/acornService';
-import { ACORN_CONFIG } from '../config/weddingConfig';
+import {
+  ACORN_CONFIG,
+  MINIROOM_GIFT_PRODUCTS,
+  MiniroomGiftProduct,
+} from '../config/weddingConfig';
 import { TabType } from './TabBar';
 import { CoupleQuizModal } from './CoupleQuizModal';
 
@@ -24,7 +37,16 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
   const [loading, setLoading] = useState(true);
   const [isClaimingWelcome, setIsClaimingWelcome] = useState(false);
   const [isClaimingIlchon, setIsClaimingIlchon] = useState(false);
+  const [isClaimingMiniroomGift, setIsClaimingMiniroomGift] = useState(false);
   const [showQuizModal, setShowQuizModal] = useState(false);
+
+  // Gift Shelf Purchase & Miniroom Display Modal State
+  const [selectedGiftModal, setSelectedGiftModal] = useState<{
+    gift: MiniroomGiftProduct;
+    step: 'buy' | 'display';
+  } | null>(null);
+  const [senderName, setSenderName] = useState('');
+  const [isProcessingGift, setIsProcessingGift] = useState(false);
 
   useEffect(() => {
     if (!isAuthReady) return;
@@ -42,15 +64,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
     if (isClaimingWelcome || profile.claimed?.welcome) return;
     setIsClaimingWelcome(true);
     try {
-      let uid = currentUser?.uid || '';
-      if (!uid) {
-        try {
-          const user = await ensureAnonymousAuth();
-          uid = user.uid;
-        } catch {
-          // Proceed with guest local profile fallback
-        }
-      }
+      const uid = currentUser?.uid || '';
       await AcornService.claimWelcomeReward(uid, onShowToast);
     } catch (err) {
       console.error('Welcome reward claim failed:', err);
@@ -64,15 +78,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
     if (isClaimingIlchon || profile.claimed?.ilchon || !profile.eligible?.ilchon) return;
     setIsClaimingIlchon(true);
     try {
-      let uid = currentUser?.uid || '';
-      if (!uid) {
-        try {
-          const user = await ensureAnonymousAuth();
-          uid = user.uid;
-        } catch {
-          // Proceed with guest local profile fallback
-        }
-      }
+      const uid = currentUser?.uid || '';
       await AcornService.claimIlchonReward(uid, onShowToast);
     } catch (err) {
       console.error('Ilchon reward claim failed:', err);
@@ -82,40 +88,84 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
     }
   };
 
+  const handleClaimMiniroomGift = async () => {
+    if (isClaimingMiniroomGift || profile.claimed?.miniroomGift || !profile.eligible?.miniroomGift) return;
+    setIsClaimingMiniroomGift(true);
+    try {
+      const uid = currentUser?.uid || '';
+      await AcornService.claimMiniroomGiftReward(uid, onShowToast);
+    } catch (err) {
+      console.error('Miniroom gift reward claim failed:', err);
+      onShowToast('도토리 받기에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsClaimingMiniroomGift(false);
+    }
+  };
+
+  const handleScrollToShelf = () => {
+    const el = document.getElementById('gift-shelf');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleConfirmPurchase = async () => {
+    if (!selectedGiftModal || isProcessingGift) return;
+    setIsProcessingGift(true);
+    try {
+      const uid = currentUser?.uid || '';
+      const res = await AcornService.purchaseGift(uid, selectedGiftModal.gift);
+      if (!res.success) {
+        if (res.reason === 'insufficient_acorns') {
+          onShowToast('보유한 도토리가 부족해요! 미션을 통해 도토리를 모아보세요 🌰');
+        } else {
+          onShowToast('이미 구매한 상품이에요! 바로 미니룸에 진열해보세요.');
+          setSelectedGiftModal({ gift: selectedGiftModal.gift, step: 'display' });
+        }
+        return;
+      }
+      onShowToast(`🛍️ '${selectedGiftModal.gift.name}' 구매 완료! 이제 미니룸에 진열해보세요.`);
+      setSelectedGiftModal({ gift: selectedGiftModal.gift, step: 'display' });
+    } catch (err) {
+      console.error('Gift purchase failed:', err);
+      onShowToast('상품 구매에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsProcessingGift(false);
+    }
+  };
+
+  const handleConfirmDisplay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedGiftModal || isProcessingGift) return;
+    setIsProcessingGift(true);
+    try {
+      const uid = currentUser?.uid || '';
+      const wasAlreadyEligible = !!profile.eligible?.miniroomGift;
+      await AcornService.displayGiftInMiniroom(uid, selectedGiftModal.gift, senderName);
+      setSelectedGiftModal(null);
+      setSenderName('');
+      if (!wasAlreadyEligible && !profile.claimed?.miniroomGift) {
+        onShowToast('🖼️ 미니룸에 선물이 진열되었어요! 도토리를 수령해보세요 🌰');
+      } else {
+        onShowToast(`🖼️ '${selectedGiftModal.gift.name}'이(가) 미니룸에 진열되었어요!`);
+      }
+    } catch (err) {
+      console.error('Gift display failed:', err);
+      onShowToast('미니룸 진열에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsProcessingGift(false);
+    }
+  };
+
   const todayStr = AcornService.getTodayString();
-  const isQuizDailyLimitReached = 
-    profile.quizDaily?.date === todayStr && 
+  const isQuizDailyLimitReached =
+    profile.quizDaily?.date === todayStr &&
     (profile.quizDaily?.earned || 0) >= ACORN_CONFIG.QUIZ_DAILY_MAX;
 
-  const baseMissions = [
-    {
-      id: 'welcome',
-      title: '첫 방문 입장 축하 선물',
-      reward: ACORN_CONFIG.WELCOME_REWARD,
-      isCompleted: !!profile.claimed?.welcome,
-      isEligible: true,
-      actionText: null,
-      onAction: null,
-    },
-    {
-      id: 'ilchon',
-      title: '소중한 인연 일촌 신청하기',
-      reward: ACORN_CONFIG.ILCHON_REWARD,
-      isCompleted: !!profile.claimed?.ilchon,
-      isEligible: !!profile.eligible?.ilchon,
-      actionText: '일촌 신청하러가기',
-      onAction: () => onNavigateTab('ilchon'),
-    },
-    {
-      id: 'guestbook',
-      title: '신랑·신부에게 축하 방명록 남기기',
-      reward: ACORN_CONFIG.GUESTBOOK_REWARD,
-      isCompleted: !!profile.claimed?.guestbook,
-      isEligible: false,
-      actionText: '방명록 쓰러가기',
-      onAction: () => onNavigateTab('guestbook'),
-    },
-  ];
+  const isMiniroomGiftCompleted = !!profile.claimed?.miniroomGift;
+  const isMiniroomGiftEligible = !!profile.eligible?.miniroomGift;
+  const purchasedIds = profile.purchasedGiftIds || [];
+  const displayedIds = profile.displayedGiftIds || [];
 
   return (
     <div className="w-full space-y-4 animate-fadeIn">
@@ -145,7 +195,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         </div>
       </div>
 
-      {/* 1. 상단: "내 도토리 🌰 0개" 큰 잔액 카드 */}
+      {/* 1. 상단: "내 도토리 🌰 N개" 큰 잔액 카드 */}
       <div className="retro-box bg-[#FFFDF9] p-5 text-center space-y-2 relative overflow-hidden shadow-[4px_4px_0_#3B2F2F]">
         {/* Subtle decorative background acorn icon */}
         <div className="absolute -right-4 -bottom-4 text-7xl opacity-10 select-none pointer-events-none">
@@ -168,11 +218,11 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         </div>
 
         <p className="font-body text-[11px] text-[#666666]">
-          다양한 미션을 완료하고 도토리를 모아보세요!
+          미션을 완료하고 도토리를 모아 미니룸에 예쁜 선물을 보내보세요!
         </p>
       </div>
 
-      {/* 2. 중간: "도토리 모으는 방법" 목록 */}
+      {/* 2. 중간: "도토리 모으는 방법" 목록 (4개 고정 순서) */}
       <div className="retro-box p-4 bg-white space-y-3">
         <div className="flex items-center justify-between border-b-2 border-dashed border-[#dcd1be] pb-2">
           <h3 className="font-pixel text-sm font-bold text-[#3B2F2F] flex items-center gap-1.5">
@@ -185,107 +235,109 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         </div>
 
         <div className="space-y-2">
-          {/* Base 3 missions: Welcome, Ilchon, Guestbook */}
-          {baseMissions.map((mission) => (
-            <div
-              key={mission.id}
-              className={`p-2.5 rounded-lg border-2 border-[#3B2F2F] flex items-center justify-between gap-2 text-xs font-pixel transition-all ${
-                mission.isCompleted
-                  ? 'bg-[#F4FBF7] shadow-[2px_2px_0_#51CF66]'
-                  : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
-              }`}
-            >
-              <div className="space-y-0.5 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[#3B2F2F] font-bold">
-                    {mission.title}
-                  </span>
-                  <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
-                    +{mission.reward} 🌰
-                  </span>
-                </div>
-                {mission.actionText && !mission.isCompleted && !mission.isEligible && mission.onAction && (
-                  <button
-                    onClick={mission.onAction}
-                    className="text-[11px] text-[#2E8BFF] hover:underline flex items-center gap-0.5 font-body pt-0.5 cursor-pointer"
-                  >
-                    <span>{mission.actionText}</span>
-                    <ChevronRight className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
-              {/* Status Badge / Action Button */}
-              <div className="shrink-0">
-                {mission.id === 'welcome' ? (
-                  mission.isCompleted ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
-                      <span>도토리 수령</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleClaimWelcome}
-                      disabled={isClaimingWelcome}
-                      className="retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] disabled:opacity-60 text-white px-2.5 py-1 text-[11px] font-pixel flex items-center gap-1 cursor-pointer shadow-xs"
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                      <span>{isClaimingWelcome ? '받는 중...' : '도토리 받기'}</span>
-                    </button>
-                  )
-                ) : mission.id === 'ilchon' ? (
-                  mission.isCompleted ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
-                      <span>도토리 수령</span>
-                    </button>
-                  ) : mission.isEligible ? (
-                    <button
-                      onClick={handleClaimIlchon}
-                      disabled={isClaimingIlchon}
-                      className="retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] disabled:opacity-60 text-white px-2.5 py-1 text-[11px] font-pixel flex items-center gap-1 cursor-pointer shadow-xs"
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                      <span>{isClaimingIlchon ? '받는 중...' : '도토리 받기'}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex items-center gap-1 text-[11px] text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed opacity-75"
-                    >
-                      <Gift className="w-3.5 h-3.5 text-[#ADB5BD]" />
-                      <span>도토리 받기</span>
-                    </button>
-                  )
-                ) : mission.isCompleted ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
-                    <span>도토리 수령</span>
-                  </button>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-[#868E96] bg-[#F1F3F5] border border-[#CED4DA] px-2 py-1 rounded">
-                    <Clock className="w-3.5 h-3.5 text-[#ADB5BD]" />
-                    <span>미완료</span>
-                  </span>
-                )}
+          {/* 1) 첫 방문 입장 축하 선물 */}
+          <div
+            className={`p-2.5 rounded-lg border-2 border-[#3B2F2F] flex items-center justify-between gap-2 text-xs font-pixel transition-all ${
+              profile.claimed?.welcome
+                ? 'bg-[#F4FBF7] shadow-[2px_2px_0_#51CF66]'
+                : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
+            }`}
+          >
+            <div className="space-y-0.5 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[#3B2F2F] font-bold">
+                  첫 방문 입장 축하 선물
+                </span>
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
+                  +{ACORN_CONFIG.WELCOME_REWARD} 🌰
+                </span>
               </div>
             </div>
-          ))}
 
-          {/* 4. 커플 퀴즈 풀기 항목 */}
+            <div className="shrink-0">
+              {profile.claimed?.welcome ? (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
+                  <span>도토리 수령</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleClaimWelcome}
+                  disabled={isClaimingWelcome}
+                  className="retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] disabled:opacity-60 text-white px-2.5 py-1 text-[11px] font-pixel flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Gift className="w-3.5 h-3.5" />
+                  <span>{isClaimingWelcome ? '받는 중...' : '도토리 받기'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2) 소중한 인연 일촌 신청하기 */}
+          <div
+            className={`p-2.5 rounded-lg border-2 border-[#3B2F2F] flex items-center justify-between gap-2 text-xs font-pixel transition-all ${
+              profile.claimed?.ilchon
+                ? 'bg-[#F4FBF7] shadow-[2px_2px_0_#51CF66]'
+                : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
+            }`}
+          >
+            <div className="space-y-0.5 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[#3B2F2F] font-bold">
+                  소중한 인연 일촌 신청하기
+                </span>
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
+                  +{ACORN_CONFIG.ILCHON_REWARD} 🌰
+                </span>
+              </div>
+              {!profile.claimed?.ilchon && !profile.eligible?.ilchon && (
+                <button
+                  onClick={() => onNavigateTab('ilchon')}
+                  className="text-[11px] text-[#2E8BFF] hover:underline flex items-center gap-0.5 font-body pt-0.5 cursor-pointer"
+                >
+                  <span>일촌 신청하러가기</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <div className="shrink-0">
+              {profile.claimed?.ilchon ? (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
+                  <span>도토리 수령</span>
+                </button>
+              ) : profile.eligible?.ilchon ? (
+                <button
+                  onClick={handleClaimIlchon}
+                  disabled={isClaimingIlchon}
+                  className="retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] disabled:opacity-60 text-white px-2.5 py-1 text-[11px] font-pixel flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Gift className="w-3.5 h-3.5" />
+                  <span>{isClaimingIlchon ? '받는 중...' : '도토리 받기'}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-1 text-[11px] text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed opacity-75"
+                >
+                  <Gift className="w-3.5 h-3.5 text-[#ADB5BD]" />
+                  <span>도토리 받기</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 3) 커플 퀴즈 풀기 */}
           <div
             className={`p-2.5 rounded-lg border-2 border-[#3B2F2F] flex items-center justify-between gap-2 text-xs font-pixel transition-all ${
               isQuizDailyLimitReached
@@ -304,7 +356,6 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
               </div>
             </div>
 
-            {/* Status Button: "도전하기" or "오늘 완료" */}
             <div className="shrink-0">
               {isQuizDailyLimitReached ? (
                 <span className="inline-flex items-center gap-1 text-[11px] text-[#2B8A3E] font-bold bg-[#EBFBEE] border border-[#B2F2BB] px-2 py-1 rounded">
@@ -322,39 +373,286 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
               )}
             </div>
           </div>
+
+          {/* 4) 미니룸에 선물 보내기 */}
+          <div
+            className={`p-2.5 rounded-lg border-2 border-[#3B2F2F] flex items-center justify-between gap-2 text-xs font-pixel transition-all ${
+              isMiniroomGiftCompleted
+                ? 'bg-[#F4FBF7] shadow-[2px_2px_0_#51CF66]'
+                : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
+            }`}
+          >
+            <div className="space-y-0.5 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[#3B2F2F] font-bold">
+                  미니룸에 선물 보내기
+                </span>
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
+                  +{ACORN_CONFIG.MINIROOM_GIFT_REWARD} 🌰
+                </span>
+              </div>
+              {!isMiniroomGiftCompleted && !isMiniroomGiftEligible && (
+                <button
+                  onClick={handleScrollToShelf}
+                  className="text-[11px] text-[#2E8BFF] hover:underline flex items-center gap-0.5 font-body pt-0.5 cursor-pointer"
+                >
+                  <span>선물 진열대에서 구매 후 진열하기</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <div className="shrink-0">
+              {isMiniroomGiftCompleted ? (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-1 text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#868E96]" />
+                  <span>도토리 수령</span>
+                </button>
+              ) : isMiniroomGiftEligible ? (
+                <button
+                  onClick={handleClaimMiniroomGift}
+                  disabled={isClaimingMiniroomGift}
+                  className="retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] disabled:opacity-60 text-white px-2.5 py-1 text-[11px] font-pixel flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Gift className="w-3.5 h-3.5" />
+                  <span>{isClaimingMiniroomGift ? '받는 중...' : '도토리 받기'}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-1 text-[11px] text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] px-2.5 py-1 rounded cursor-not-allowed opacity-75"
+                >
+                  <Gift className="w-3.5 h-3.5 text-[#ADB5BD]" />
+                  <span>도토리 받기</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 3. 하단: "상품 준비 중이에요 🌿" 빈 진열대 */}
-      <div className="retro-box p-4 bg-white space-y-3">
+      {/* 3. 하단: 선물 진열대 (상품 구매 및 미니룸 진열) */}
+      <div id="gift-shelf" className="retro-box p-4 bg-white space-y-3">
         <div className="flex items-center justify-between border-b-2 border-dashed border-[#dcd1be] pb-2">
           <h3 className="font-pixel text-sm font-bold text-[#3B2F2F] flex items-center gap-1.5">
             <Store className="w-4 h-4 text-[#2E8BFF]" />
             <span>선물 진열대</span>
           </h3>
-          <span className="text-[10px] font-pixel text-[#888888]">COMING SOON</span>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('invitation')}
+            className="text-[11px] font-pixel text-[#2E8BFF] hover:underline flex items-center gap-0.5 cursor-pointer"
+          >
+            <span>미니룸 구경가기</span>
+            <ChevronRight className="w-3 h-3" />
+          </button>
         </div>
 
-        {/* 빈 진열장 느낌의 픽셀 감성 일러스트 박스 */}
-        <div className="bg-[#FAF7F0] border-2 border-dashed border-[#dcd1be] rounded-lg p-6 text-center space-y-2.5">
-          <div className="w-12 h-12 mx-auto rounded-full bg-[#EBF4FF] border border-[#2E8BFF] flex items-center justify-center text-2xl shadow-xs">
-            🌿
-          </div>
-          <div className="space-y-1">
-            <h4 className="font-pixel text-sm font-bold text-[#3B2F2F]">
-              상품 준비 중이에요 🌿
-            </h4>
-            <p className="font-body text-xs text-[#666666] leading-relaxed max-w-xs mx-auto">
-              미니홈피를 환하게 밝혀줄 예쁜 축하 화환과 특별한 아이템들이 곧 입고될 예정입니다!
-            </p>
-          </div>
+        <p className="font-body text-[11px] text-[#666666] leading-relaxed">
+          도토리로 축하 선물을 구매하고 미니룸에 직접 진열해보세요! 진열까지 완료하면 위의 <strong className="text-[#3B2F2F]">미니룸에 선물 보내기</strong> 도토리를 받을 수 있어요.
+        </p>
 
-          <div className="pt-2 flex items-center justify-center gap-1 text-[11px] font-pixel text-[#E07A5F] bg-[#FFF5F2] py-1.5 px-3 rounded border border-[#FFD8A8] inline-flex">
-            <Gift className="w-3.5 h-3.5" />
-            <span>도토리를 미리 모아두시면 바로 선물할 수 있어요!</span>
-          </div>
+        {/* Gift Items Grid */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {MINIROOM_GIFT_PRODUCTS.map((gift) => {
+            const isDisplayed = displayedIds.includes(gift.id);
+            const isPurchased = purchasedIds.includes(gift.id);
+            const canAfford = profile.acorns >= gift.price;
+
+            return (
+              <div
+                key={gift.id}
+                className={`rounded-lg border-2 border-[#3B2F2F] p-2.5 flex flex-col justify-between gap-2 transition-all ${
+                  isDisplayed
+                    ? 'bg-[#F4FBF7] shadow-[2px_2px_0_#51CF66]'
+                    : isPurchased
+                      ? 'bg-[#FFF9DB] shadow-[2px_2px_0_#FCC419]'
+                      : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
+                }`}
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="w-10 h-10 rounded-lg bg-white border-2 border-[#3B2F2F] flex items-center justify-center text-2xl shadow-[1px_1px_0_#3B2F2F] shrink-0">
+                      {gift.emoji}
+                    </div>
+                    <span className="font-pixel text-[10px] font-bold bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] px-1.5 py-0.5 rounded">
+                      🌰 {gift.price}개
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="font-pixel text-xs font-bold text-[#3B2F2F]">
+                      {gift.name}
+                    </h4>
+                    <p className="font-body text-[10px] text-[#666666] leading-snug mt-0.5">
+                      {gift.description}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                <div className="pt-1">
+                  {isDisplayed ? (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTab('invitation')}
+                      className="w-full py-1.5 px-2 rounded text-[11px] font-pixel bg-[#EBFBEE] text-[#2B8A3E] border border-[#B2F2BB] flex items-center justify-center gap-1 cursor-pointer hover:brightness-95"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#40C057]" />
+                      <span>진열 완료 · 보기</span>
+                    </button>
+                  ) : isPurchased ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSenderName('');
+                        setSelectedGiftModal({ gift, step: 'display' });
+                      }}
+                      className="w-full retro-btn bg-[#2E8BFF] hover:bg-[#1C74E0] text-white py-1.5 px-2 text-[11px] font-pixel flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Frame className="w-3.5 h-3.5" />
+                      <span>미니룸에 진열하기</span>
+                    </button>
+                  ) : canAfford ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSenderName('');
+                        setSelectedGiftModal({ gift, step: 'buy' });
+                      }}
+                      className="w-full retro-btn bg-[#3B2F2F] hover:bg-[#2a2121] text-white py-1.5 px-2 text-[11px] font-pixel flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5 text-[#FFD43B]" />
+                      <span>구매하기</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-1.5 px-2 rounded text-[11px] font-pixel text-[#868E96] bg-[#E9ECEF] border border-[#CED4DA] cursor-not-allowed"
+                    >
+                      도토리 부족 ({gift.price}개)
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Purchase & Miniroom Display Modal */}
+      {selectedGiftModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="retro-box bg-white max-w-xs w-full p-4 space-y-3.5 shadow-[6px_6px_0_#2E8BFF]">
+            <div className="flex items-center justify-between border-b-2 border-[#3B2F2F] pb-2">
+              <div className="flex items-center gap-1.5 font-pixel text-xs font-bold text-[#3B2F2F]">
+                {selectedGiftModal.step === 'buy' ? (
+                  <>
+                    <ShoppingBag className="w-4 h-4 text-[#2E8BFF]" />
+                    <span>선물 구매 확인</span>
+                  </>
+                ) : (
+                  <>
+                    <Frame className="w-4 h-4 text-[#2E8BFF]" />
+                    <span>미니룸에 선물 진열하기</span>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedGiftModal(null)}
+                className="text-[#888888] hover:text-[#3B2F2F] p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-[#FAF7F0] border-2 border-[#3B2F2F] rounded-lg p-3 flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-white border-2 border-[#3B2F2F] flex items-center justify-center text-3xl shrink-0">
+                {selectedGiftModal.gift.emoji}
+              </div>
+              <div className="space-y-0.5 text-xs">
+                <div className="font-pixel font-bold text-[#3B2F2F]">
+                  {selectedGiftModal.gift.name}
+                </div>
+                <div className="font-body text-[11px] text-[#666666]">
+                  {selectedGiftModal.gift.description}
+                </div>
+                <div className="font-pixel text-[11px] text-[#D9480F] font-bold">
+                  가격: 🌰 {selectedGiftModal.gift.price}개
+                </div>
+              </div>
+            </div>
+
+            {selectedGiftModal.step === 'buy' ? (
+              <div className="space-y-3">
+                <div className="text-[11px] font-body text-[#555555] text-center bg-[#EBF4FF] border border-[#2E8BFF] rounded p-2">
+                  도토리 <strong className="text-[#2E8BFF]">{selectedGiftModal.gift.price}개</strong>를 사용해 구매할까요?
+                  <br />
+                  구매 후 <strong>미니룸에 진열</strong>까지 완료하면 미션 도토리를 받을 수 있어요!
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGiftModal(null)}
+                    className="retro-btn flex-1 bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmPurchase}
+                    disabled={isProcessingGift}
+                    className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer"
+                  >
+                    {isProcessingGift ? '구매 중...' : `구매하기 (🌰 ${selectedGiftModal.gift.price}개)`}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleConfirmDisplay} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-pixel text-[#3B2F2F]">
+                    보내는 분 이름 <span className="text-[#888888] font-normal">(선택)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={senderName}
+                    onChange={(e) => setSenderName(e.target.value)}
+                    placeholder="예: 민석 (비우면 '축하 하객'으로 표시)"
+                    maxLength={20}
+                    className="w-full text-xs font-pixel px-2.5 py-2 border-2 border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGiftModal(null)}
+                    className="retro-btn flex-1 bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
+                  >
+                    나중에
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isProcessingGift}
+                    className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <Frame className="w-3.5 h-3.5" />
+                    <span>{isProcessingGift ? '진열 중...' : '미니룸에 진열하기'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

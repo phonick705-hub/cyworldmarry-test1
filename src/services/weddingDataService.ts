@@ -108,7 +108,7 @@ export class WeddingDataService {
       }
 
       // 3. Check and seed Ilchons if empty
-      const ilchonSnap = await getDocs(query(collection(db, ILCHON_PATH), limit(1)));
+      const ilchonSnap = await getDocs(query(collection(db, ILCHON_PATH), where('status', '==', 'approved'), limit(1)));
       if (ilchonSnap.empty) {
         for (const item of WEDDING_CONFIG.ilchons) {
           try {
@@ -227,9 +227,12 @@ export class WeddingDataService {
     message: string;
     authorUid: string;
   }): Promise<string> {
-    const name = data.authorName.trim() || '익명의 일촌';
-    const ilchon = data.ilchonName?.trim();
-    const authorDisplay = ilchon ? `${name}(${ilchon})` : name;
+    const name = (data.authorName.trim() || '익명의 일촌').slice(0, 30);
+    const ilchon = (data.ilchonName?.trim() || '').slice(0, 30);
+    const authorDisplay = (ilchon ? `${name}(${ilchon})` : name).slice(0, 60);
+    const emoji = (data.emoji || '💕').slice(0, 10);
+    const message = data.message.trim().slice(0, 200);
+    const authorUid = (data.authorUid || 'anon').slice(0, 128);
 
     const now = new Date();
     const formattedDate = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -238,10 +241,10 @@ export class WeddingDataService {
       const docRef = await addDoc(collection(db, GUESTBOOK_PATH), {
         author: authorDisplay,
         authorName: name,
-        ilchonName: ilchon || '',
-        emoji: data.emoji || '💕',
-        message: data.message.trim(),
-        authorUid: data.authorUid,
+        ilchonName: ilchon,
+        emoji,
+        message,
+        authorUid,
         createdAt: formattedDate,
         edited: false,
       });

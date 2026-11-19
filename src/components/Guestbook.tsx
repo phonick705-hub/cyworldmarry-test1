@@ -18,7 +18,6 @@ import {
 } from '../services/weddingDataService';
 import { WEDDING_CONFIG } from '../config/weddingConfig';
 import { bgmPlayer } from '../utils/soundSynthesizer';
-import { AcornService } from '../services/acornService';
 
 interface GuestbookProps {
   onShowToast: (msg: string) => void;
@@ -90,11 +89,6 @@ export const Guestbook: React.FC<GuestbookProps> = ({ onShowToast, onEntryAdded,
       if (onEntryAdded) {
         onEntryAdded();
       }
-
-      // Check and claim first guestbook acorn reward (+10 acorns)
-      setTimeout(() => {
-        AcornService.claimGuestbookReward(currentUser?.uid || '', onShowToast);
-      }, 1200);
     } catch (err: unknown) {
       console.error(err);
       onShowToast('방명록 등록에 실패했습니다. 다시 시도해주세요.');

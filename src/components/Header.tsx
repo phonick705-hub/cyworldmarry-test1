@@ -49,8 +49,12 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
   };
 
   const handleLogout = async () => {
-    await logout();
-    onShowToast('관리자 모드에서 로그아웃했습니다.');
+    try {
+      await logout();
+      onShowToast('관리자 모드에서 로그아웃했습니다.');
+    } catch {
+      onShowToast('로그아웃 처리 중 오류가 발생했습니다.');
+    }
   };
 
   const handleStartEditWord = () => {

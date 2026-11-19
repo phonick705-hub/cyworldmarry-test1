@@ -37,6 +37,71 @@ interface InvitationCardProps {
   onShowToast: (msg: string) => void;
 }
 
+const buildMapUrls = (address: string, venueName?: string) => {
+  const queryText = (address || venueName || '').trim();
+  const encoded = encodeURIComponent(queryText);
+  return {
+    naver: `https://m.map.naver.com/search2/search.naver?query=${encoded}`,
+    kakao: `https://map.kakao.com/link/search/${encoded}`,
+    tmap: `https://tmap.life/nav/search?query=${encoded}`,
+  };
+};
+
+const KOREAN_WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
+interface CeremonyDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+const parseDateFromText = (text?: string): CeremonyDateParts | null => {
+  if (!text) return null;
+  const krMatch = text.match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?/);
+  if (krMatch) {
+    const rawYear = parseInt(krMatch[1], 10);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    return {
+      year,
+      month: parseInt(krMatch[2], 10),
+      day: parseInt(krMatch[3], 10),
+    };
+  }
+  const sepMatch = text.match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
+  if (sepMatch) {
+    return {
+      year: parseInt(sepMatch[1], 10),
+      month: parseInt(sepMatch[2], 10),
+      day: parseInt(sepMatch[3], 10),
+    };
+  }
+  return null;
+};
+
+const formatDateIsoPrefix = (parts: CeremonyDateParts): string => {
+  const y = String(parts.year);
+  const m = String(parts.month).padStart(2, '0');
+  const d = String(parts.day).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const resolveCeremonyDateParts = (dateIso?: string, dateDisplay?: string): CeremonyDateParts => {
+  const fromDisplay = parseDateFromText(dateDisplay);
+  if (fromDisplay) return fromDisplay;
+
+  const fromIso = parseDateFromText(dateIso);
+  if (fromIso) return fromIso;
+
+  return { year: 2027, month: 5, day: 29 };
+};
+
+const calculateCalendarDDay = (parts: CeremonyDateParts): number => {
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetUtc = Date.UTC(parts.year, parts.month - 1, parts.day);
+  return Math.round((targetUtc - todayUtc) / (1000 * 60 * 60 * 24));
+};
+
 export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) => {
   const { isAdmin, setShowAdminModal } = useAuth();
   const [config, setConfig] = useState(WEDDING_CONFIG);
@@ -107,10 +172,14 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
   // 1. General Invitation Edit Modal
   const [showEditModal, setShowEditModal] = useState(false);
   const [editGreeting, setEditGreeting] = useState(config.invitation.greetingFull);
+  const [editDate, setEditDate] = useState(formatDateIsoPrefix(resolveCeremonyDateParts(config.ceremony.date, config.ceremony.dateDisplay)));
   const [editDateDisplay, setEditDateDisplay] = useState(config.ceremony.dateDisplay);
   const [editVenue, setEditVenue] = useState(config.ceremony.venueName);
   const [editHall, setEditHall] = useState(config.ceremony.hallName);
   const [editAddress, setEditAddress] = useState(config.ceremony.address);
+  const [editDetailAddress, setEditDetailAddress] = useState(config.ceremony.detailAddress || '');
+  const [editSubwayGuide, setEditSubwayGuide] = useState(config.ceremony.subwayGuide || '');
+  const [editParkingGuide, setEditParkingGuide] = useState(config.ceremony.parkingGuide || '');
   const [isSaving, setIsSaving] = useState(false);
 
   // 2. Contacts Edit Modal
@@ -190,24 +259,62 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
 
   // Open General Invitation Edit Modal
   const handleOpenEdit = () => {
+    const resolved = resolveCeremonyDateParts(config.ceremony.date, config.ceremony.dateDisplay);
+    setEditDate(formatDateIsoPrefix(resolved));
     setEditGreeting(config.invitation.greetingFull);
     setEditDateDisplay(config.ceremony.dateDisplay);
     setEditVenue(config.ceremony.venueName);
     setEditHall(config.ceremony.hallName);
     setEditAddress(config.ceremony.address);
+    setEditDetailAddress(config.ceremony.detailAddress || '');
+    setEditSubwayGuide(config.ceremony.subwayGuide || '');
+    setEditParkingGuide(config.ceremony.parkingGuide || '');
     setShowEditModal(true);
+  };
+
+  const handleEditDateChange = (newIsoDate: string) => {
+    setEditDate(newIsoDate);
+    const parts = parseDateFromText(newIsoDate);
+    if (!parts) return;
+    const d = new Date(parts.year, parts.month - 1, parts.day);
+    const weekday = KOREAN_WEEKDAYS[d.getDay()];
+    const newPrefix = `${parts.year}년 ${parts.month}월 ${parts.day}일 ${weekday}`;
+    const timeMatch = editDateDisplay.match(/(?:일요일|월요일|화요일|수요일|목요일|금요일|토요일)\s*(.*)$/);
+    const timeSuffix = timeMatch && timeMatch[1].trim() ? timeMatch[1].trim() : '낮 12시 30분';
+    setEditDateDisplay(`${newPrefix} ${timeSuffix}`);
+  };
+
+  const handleEditDateDisplayChange = (val: string) => {
+    setEditDateDisplay(val);
+    const parsed = parseDateFromText(val);
+    if (parsed && parsed.month >= 1 && parsed.month <= 12 && parsed.day >= 1 && parsed.day <= 31) {
+      setEditDate(formatDateIsoPrefix(parsed));
+    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const trimmedAddress = editAddress.trim();
+      const trimmedVenue = editVenue.trim();
+      const updatedMapUrls = buildMapUrls(trimmedAddress, trimmedVenue);
+      const finalDateParts = parseDateFromText(editDate) || resolveCeremonyDateParts(config.ceremony.date, editDateDisplay);
+      const timeSuffixMatch = (config.ceremony.date || '').match(/T(\d{2}:\d{2}:\d{2})/);
+      const timePart = timeSuffixMatch ? timeSuffixMatch[1] : '12:30:00';
+      const updatedDateIso = `${formatDateIsoPrefix(finalDateParts)}T${timePart}`;
+
       const updatedCeremony = {
         ...config.ceremony,
-        dateDisplay: editDateDisplay,
-        venueName: editVenue,
-        hallName: editHall,
-        address: editAddress,
+        date: updatedDateIso,
+        dateDisplay: editDateDisplay.trim(),
+        venueName: trimmedVenue,
+        hallName: editHall.trim(),
+        address: trimmedAddress,
+        detailAddress: editDetailAddress.trim(),
+        subwayGuide: editSubwayGuide.trim(),
+        parkingGuide: editParkingGuide.trim(),
+        mapUrls: updatedMapUrls,
       };
 
       const updatedInvitation = {
@@ -221,9 +328,15 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
         invitation: updatedInvitation,
       });
 
+      setConfig((prev) => ({
+        ...prev,
+        ceremony: updatedCeremony,
+        invitation: updatedInvitation,
+      }));
+
       setShowEditModal(false);
       bgmPlayer.playChime();
-      onShowToast('예식 정보가 수정되었습니다! ✨');
+      onShowToast('예식 및 교통 안내 정보가 수정되었습니다! ✨');
     } catch {
       onShowToast('수정에 실패했습니다. 관리자 권한을 확인해주세요.');
     } finally {
@@ -429,11 +542,9 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
     }
   };
 
-  // Calculate live D-Day
-  const weddingDate = new Date(config.ceremony.date);
-  const today = new Date();
-  const diffTime = weddingDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  // Calculate live D-Day based on calendar date (year/month/day)
+  const ceremonyDateParts = resolveCeremonyDateParts(config.ceremony.date, config.ceremony.dateDisplay);
+  const diffDays = calculateCalendarDDay(ceremonyDateParts);
   const dDayText = diffDays > 0 ? `D-${diffDays}` : diffDays === 0 ? 'D-Day 오늘!' : `D+${Math.abs(diffDays)}`;
 
   const copyToClipboard = (text: string, label: string) => {
@@ -449,6 +560,8 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
     '카카오뱅크', '토스뱅크', '기업은행', 'SC제일은행', '우체국',
     '새마을금고', '신협', '수협', 'iM뱅크(대구)', '부산은행', '경남은행', '광주은행'
   ];
+
+  const dynamicMapUrls = buildMapUrls(config.ceremony.address, config.ceremony.venueName);
 
   return (
     <div className="w-full space-y-3.5">
@@ -558,15 +671,19 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
         {/* Date & Time */}
         <div className="bg-[#FFFDF9] border border-[#3B2F2F] rounded p-2.5 flex items-start gap-2.5 shadow-[2px_2px_0_#3B2F2F]">
           <div className="w-8 h-8 rounded bg-[#2E8BFF] text-white flex flex-col items-center justify-center font-pixel shrink-0 text-[10px] leading-tight">
-            <span>5월</span>
-            <span className="text-xs font-bold">23</span>
+            <span>{ceremonyDateParts.month}월</span>
+            <span className="text-xs font-bold">{ceremonyDateParts.day}</span>
           </div>
           <div className="space-y-0.5 text-xs">
             <div className="font-pixel font-bold text-[#3B2F2F] text-xs sm:text-sm">
               {config.ceremony.dateDisplay}
             </div>
             <div className="text-[#666666] font-body">
-              토요일 낮 12시 30분
+              {diffDays > 0
+                ? `예식일까지 ${diffDays}일 남았어요 💍`
+                : diffDays === 0
+                  ? '오늘 예식이 진행됩니다 💍'
+                  : config.ceremony.venueName}
             </div>
           </div>
         </div>
@@ -584,7 +701,8 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
               </span>
             </div>
             <div className="text-[#555555] font-body text-[11px] leading-snug">
-              {config.ceremony.address} ({config.ceremony.detailAddress})
+              {config.ceremony.address}
+              {config.ceremony.detailAddress ? ` (${config.ceremony.detailAddress})` : ''}
             </div>
           </div>
         </div>
@@ -593,7 +711,7 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
         <div className="space-y-2 pt-1">
           <div className="grid grid-cols-3 gap-1.5 text-xs font-pixel">
             <a
-              href={config.ceremony.mapUrls.naver}
+              href={dynamicMapUrls.naver}
               target="_blank"
               rel="noreferrer"
               className="retro-btn bg-[#03C75A] text-white py-2 px-1 text-center flex items-center justify-center gap-1 hover:brightness-105"
@@ -601,7 +719,7 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
               <span>네이버 지도</span>
             </a>
             <a
-              href={config.ceremony.mapUrls.kakao}
+              href={dynamicMapUrls.kakao}
               target="_blank"
               rel="noreferrer"
               className="retro-btn bg-[#FEE500] text-[#191919] py-2 px-1 text-center flex items-center justify-center gap-1 hover:brightness-95"
@@ -609,7 +727,7 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
               <span>카카오맵</span>
             </a>
             <a
-              href={config.ceremony.mapUrls.tmap}
+              href={dynamicMapUrls.tmap}
               target="_blank"
               rel="noreferrer"
               className="retro-btn bg-[#2F3438] text-white py-2 px-1 text-center flex items-center justify-center gap-1 hover:brightness-110"
@@ -631,13 +749,13 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
         <div className="bg-[#FAF7F0] border border-[#3B2F2F] rounded p-2.5 text-xs space-y-2">
           <div className="flex items-start gap-2">
             <Train className="w-3.5 h-3.5 text-[#2E8BFF] shrink-0 mt-0.5" />
-            <div className="font-body text-[11px] text-[#444444]">
+            <div className="font-body text-[11px] text-[#444444] whitespace-pre-line">
               <strong className="font-pixel text-[#3B2F2F]">지하철:</strong> {config.ceremony.subwayGuide}
             </div>
           </div>
           <div className="flex items-start gap-2">
             <Car className="w-3.5 h-3.5 text-[#E03131] shrink-0 mt-0.5" />
-            <div className="font-body text-[11px] text-[#444444]">
+            <div className="font-body text-[11px] text-[#444444] whitespace-pre-line">
               <strong className="font-pixel text-[#3B2F2F]">주차 안내:</strong> {config.ceremony.parkingGuide}
             </div>
           </div>
@@ -1335,11 +1453,45 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
 
             <form onSubmit={handleSaveEdit} className="space-y-2.5 text-xs font-pixel">
               <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-[#3B2F2F]">예식 날짜 (디데이 기준)</label>
+                  {(() => {
+                    const previewParts = resolveCeremonyDateParts(editDate, editDateDisplay);
+                    const previewDiff = calculateCalendarDDay(previewParts);
+                    const previewLabel =
+                      previewDiff > 0
+                        ? `D-${previewDiff}`
+                        : previewDiff === 0
+                          ? 'D-Day 오늘!'
+                          : `D+${Math.abs(previewDiff)} (지난 날짜)`;
+                    return (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                          previewDiff < 0
+                            ? 'bg-[#FFF0F0] text-[#E03131] border border-[#FF8787]'
+                            : 'bg-[#EBF4FF] text-[#2E8BFF] border border-[#2E8BFF]'
+                        }`}
+                      >
+                        미리보기: {previewLabel}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => handleEditDateChange(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-[#3B2F2F] rounded bg-[#FFFDF9]"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-[11px] text-[#3B2F2F]">예식 일시 문구</label>
                 <input
                   type="text"
                   value={editDateDisplay}
-                  onChange={(e) => setEditDateDisplay(e.target.value)}
+                  onChange={(e) => handleEditDateDisplayChange(e.target.value)}
                   className="w-full px-2 py-1.5 border border-[#3B2F2F] rounded bg-[#FFFDF9]"
                   required
                 />
@@ -1374,8 +1526,45 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
                   type="text"
                   value={editAddress}
                   onChange={(e) => setEditAddress(e.target.value)}
+                  placeholder="예: 서울특별시 서초구 반포대로 235"
                   className="w-full px-2 py-1.5 border border-[#3B2F2F] rounded bg-[#FFFDF9]"
                   required
+                />
+                <p className="text-[10px] font-body text-[#2E8BFF]">
+                  ※ 입력한 주소를 기반으로 네이버 지도 · 카카오맵 · 티맵 안내가 자동 변경됩니다.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-[#3B2F2F]">상세 주소 / 건물명 <span className="text-[#888888] font-normal">(선택)</span></label>
+                <input
+                  type="text"
+                  value={editDetailAddress}
+                  onChange={(e) => setEditDetailAddress(e.target.value)}
+                  placeholder="예: 효성빌딩 LL층"
+                  className="w-full px-2 py-1.5 border border-[#3B2F2F] rounded bg-[#FFFDF9]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-[#3B2F2F]">지하철 안내</label>
+                <textarea
+                  value={editSubwayGuide}
+                  onChange={(e) => setEditSubwayGuide(e.target.value)}
+                  rows={2}
+                  placeholder="예: 지하철 3, 7, 9호선 고속터미널역 5번 출구 도보 5분"
+                  className="w-full font-body text-xs p-2 border border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none resize-none leading-relaxed"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-[#3B2F2F]">주차 안내</label>
+                <textarea
+                  value={editParkingGuide}
+                  onChange={(e) => setEditParkingGuide(e.target.value)}
+                  rows={2}
+                  placeholder="예: 건물 지하 주차장 2시간 무료 (안내데스크 주차 도장)"
+                  className="w-full font-body text-xs p-2 border border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none resize-none leading-relaxed"
                 />
               </div>
 

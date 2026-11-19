@@ -21,12 +21,14 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Admin authorization check based on configured admin emails
+    // Admin authorization check based on configured verified admin emails
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'phonick705@gmail.com' ||
-        request.auth.token.email == 'admin@wedding.com'
-      );
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && (
+          request.auth.token.email == 'phonick705@gmail.com' ||
+          request.auth.token.email == 'admin@wedding.com'
+        );
     }
 
     // Users Collection (Acorn Balance & Claimed Rewards per Visitor)
@@ -42,21 +44,85 @@ service cloud.firestore {
         && (incoming().acorns in [0, 5, 10, 15, 20])
         && incoming().claimed is map;
 
-      // Only the user themselves can update acorns (cannot decrease, delta must be 0, 5, 10, 15, or 20)
+      // User themselves can update acorns (earn +5/+10/+15/+20 or spend -5/-10/-15/-20 for gifts)
       // quizDaily.earned cannot exceed 20
       allow update: if isSignedIn()
         && (
           (request.auth.uid == userId
             && incoming().acorns is number
             && incoming().acorns >= 0
-            && (incoming().acorns - existing().acorns in [0, 5, 10, 15, 20])
+            && (incoming().acorns - existing().acorns in [-20, -15, -10, -5, 0, 5, 10, 15, 20])
             && (!('quizDaily' in incoming()) || (
                 incoming().quizDaily.earned is number
                 && incoming().quizDaily.earned >= 0
                 && incoming().quizDaily.earned <= 20
               ))
+            && (!('purchasedGiftIds' in incoming()) || (
+                incoming().purchasedGiftIds is list
+                && incoming().purchasedGiftIds.size() <= 30
+              ))
+            && (!('displayedGiftIds' in incoming()) || (
+                incoming().displayedGiftIds is list
+                && incoming().displayedGiftIds.size() <= 30
+              ))
             && incoming().claimed is map)
           || isAdmin()
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // Miniroom Displayed Gifts Collection
+    match /miniroomGifts/{giftEntryId} {
+      // Anyone can view gifts displayed in the couple Miniroom
+      allow read: if true;
+
+      // Visitors and admins can display purchased gifts with validated schema and size bounds
+      allow create: if incoming().keys().hasAll(['giftId', 'name', 'emoji', 'senderName', 'createdAt'])
+        && incoming().keys().hasOnly(['giftId', 'name', 'emoji', 'senderName', 'senderUid', 'createdAt'])
+        && incoming().giftId is string
+        && incoming().giftId.size() > 0
+        && incoming().giftId.size() <= 50
+        && incoming().name is string
+        && incoming().name.size() > 0
+        && incoming().name.size() <= 50
+        && incoming().emoji is string
+        && incoming().emoji.size() > 0
+        && incoming().emoji.size() <= 10
+        && incoming().senderName is string
+        && incoming().senderName.size() > 0
+        && incoming().senderName.size() <= 30
+        && (!('senderUid' in incoming()) || (incoming().senderUid is string && incoming().senderUid.size() <= 128))
+        && incoming().createdAt is string
+        && incoming().createdAt.size() <= 40;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // Miniroom Celebration Heart Counter (accumulated across visitors & tabs; resettable only by Admin)
+    match /miniroomStats/{statId} {
+      allow read: if true;
+
+      allow create: if statId == 'hearts'
+        && incoming().keys().hasAll(['count', 'updatedAt'])
+        && incoming().keys().hasOnly(['count', 'updatedAt'])
+        && incoming().count is int
+        && incoming().updatedAt is string
+        && incoming().updatedAt.size() <= 40
+        && (
+          (incoming().count >= 0 && incoming().count <= 5)
+          || (isAdmin() && incoming().count >= 0)
+        );
+
+      allow update: if statId == 'hearts'
+        && incoming().keys().hasAll(['count', 'updatedAt'])
+        && incoming().keys().hasOnly(['count', 'updatedAt'])
+        && incoming().count is int
+        && incoming().updatedAt is string
+        && incoming().updatedAt.size() <= 40
+        && (
+          (incoming().count > existing().count && incoming().count <= existing().count + 5)
+          || (isAdmin() && incoming().count >= 0)
         );
 
       allow delete: if isAdmin();
@@ -96,16 +162,26 @@ service cloud.firestore {
       // Anyone can read guestbook entries
       allow read: if true;
 
-      // Authenticated users can create entries with their own uid; admins can also post approved ilchon messages
-      allow create: if isSignedIn()
-        && (incoming().authorUid == request.auth.uid || isAdmin())
+      // Visitors and admins can create entries matching validated schema and length limits
+      allow create: if incoming().keys().hasAll(['author', 'emoji', 'message', 'authorUid', 'createdAt'])
+        && incoming().keys().hasOnly(['author', 'authorName', 'ilchonName', 'emoji', 'message', 'authorUid', 'createdAt', 'edited'])
+        && incoming().author is string
+        && incoming().author.size() > 0
+        && incoming().author.size() <= 60
+        && (!('authorName' in incoming()) || (incoming().authorName is string && incoming().authorName.size() <= 30))
+        && (!('ilchonName' in incoming()) || (incoming().ilchonName is string && incoming().ilchonName.size() <= 30))
+        && incoming().emoji is string
+        && incoming().emoji.size() > 0
+        && incoming().emoji.size() <= 10
         && incoming().message is string
         && incoming().message.size() > 0
         && incoming().message.size() <= 200
-        && incoming().author is string
-        && incoming().author.size() <= 60
-        && incoming().emoji is string
-        && incoming().emoji.size() <= 10;
+        && incoming().authorUid is string
+        && incoming().authorUid.size() > 0
+        && incoming().authorUid.size() <= 128
+        && incoming().createdAt is string
+        && incoming().createdAt.size() <= 40
+        && (!('edited' in incoming()) || incoming().edited == false);
 
       // Author can update message, emoji, authorName, updatedAt, edited (authorUid and createdAt cannot change)
       // Admins can also update

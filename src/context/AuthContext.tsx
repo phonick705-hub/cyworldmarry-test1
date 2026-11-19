@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { 
   auth, 
-  ensureAnonymousAuth, 
   loginWithGoogle, 
   logoutAdmin, 
   isAuthorizedAdmin 
@@ -36,24 +35,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
         setIsAdmin(isAuthorizedAdmin(user.email));
-        setIsAuthReady(true);
       } else {
-        // Automatically sign in anonymously for regular visitors
-        try {
-          const anonUser = await ensureAnonymousAuth();
-          setCurrentUser(anonUser);
-          setIsAdmin(false);
-        } catch {
-          setCurrentUser(null);
-          setIsAdmin(false);
-        } finally {
-          setIsAuthReady(true);
-        }
+        setCurrentUser(null);
+        setIsAdmin(false);
       }
+      setIsAuthReady(true);
     });
 
     // Check for secret admin entry via URL (/admin or #admin)
@@ -83,6 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     await logoutAdmin();
+    setCurrentUser(null);
     setIsAdmin(false);
   };
 

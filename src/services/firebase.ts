@@ -6,11 +6,9 @@ import {
 } from 'firebase/firestore';
 import { 
   getAuth, 
-  signInAnonymously, 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut as firebaseSignOut,
-  onAuthStateChanged,
   User
 } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -79,18 +77,9 @@ export function isAuthorizedAdmin(email: string | null | undefined): boolean {
   return ADMIN_EMAILS.map((e) => e.toLowerCase().trim()).includes(email.toLowerCase().trim());
 }
 
-// Auto Anonymous Authentication for regular visitors
-export async function ensureAnonymousAuth(): Promise<User> {
-  if (auth.currentUser) {
-    return auth.currentUser;
-  }
-  try {
-    const cred = await signInAnonymously(auth);
-    return cred.user;
-  } catch (error) {
-    console.warn('Anonymous sign in notice:', error);
-    throw error;
-  }
+// Safely return current Firebase user without attempting restricted anonymous sign-in
+export async function ensureAnonymousAuth(): Promise<User | null> {
+  return auth.currentUser;
 }
 
 // Google Sign-In for Administrators
@@ -105,8 +94,6 @@ export async function loginWithGoogle(): Promise<User> {
     // Check if the signed in user is an authorized admin
     if (!isAuthorizedAdmin(user.email)) {
       await firebaseSignOut(auth);
-      // Re-sign in anonymously so visitor permissions stay intact
-      await signInAnonymously(auth);
       throw new Error('권한이 없어요. 관리자로 등록된 이메일 계정으로 로그인해주세요.');
     }
     
@@ -120,13 +107,13 @@ export async function loginWithGoogle(): Promise<User> {
   }
 }
 
-// Logout Admin and fall back to anonymous user
+// Logout Admin cleanly without invoking restricted anonymous auth
 export async function logoutAdmin(): Promise<void> {
   try {
     await firebaseSignOut(auth);
-    await signInAnonymously(auth);
   } catch (e) {
     console.error('Logout error:', e);
+    throw e;
   }
 }
 

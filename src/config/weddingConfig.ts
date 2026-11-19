@@ -100,9 +100,9 @@ export const WEDDING_CONFIG = {
 
   // Wedding Ceremony Details
   ceremony: {
-    date: '2026-05-23T12:30:00',
-    dateDisplay: '2026년 5월 23일 토요일 낮 12시 30분',
-    dateShort: '2026.05.23 SAT 12:30 PM',
+    date: '2027-05-29T12:30:00',
+    dateDisplay: '2027년 5월 29일 토요일 낮 12시 30분',
+    dateShort: '2027.05.29 SAT 12:30 PM',
     venueName: '아펠가모 반포점',
     hallName: 'LL층 그랜드볼룸',
     address: '서울특별시 서초구 반포대로 235 (반포동 63-7)',
@@ -404,10 +404,64 @@ export const ACORN_CONFIG = {
   WELCOME_REWARD: 5,         // 첫 입장 +5
   GUESTBOOK_REWARD: 10,       // 방명록 첫 작성 +10
   ILCHON_REWARD: 10,          // 일촌 첫 신청 +10
+  MINIROOM_GIFT_REWARD: 10,   // 미니룸 선물 진열 +10
   QUIZ_REWARD: 5,             // 커플 퀴즈 정답 1개당 +5
   QUIZ_DAILY_MAX: 20,         // 커플 퀴즈 하루 최대 20
   QUIZ_QUESTIONS_PER_ROUND: 4 // 한 판당 질문 개수 (4개)
 };
+
+export interface MiniroomGiftProduct {
+  id: string;
+  name: string;
+  emoji: string;
+  price: number;
+  description: string;
+}
+
+export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
+  {
+    id: 'gift-bouquet',
+    name: '설레는 꽃다발',
+    emoji: '💐',
+    price: 5,
+    description: '향기로운 축하 마음을 담은 부케',
+  },
+  {
+    id: 'gift-balloon',
+    name: '러브 하트 풍선',
+    emoji: '🎈',
+    price: 5,
+    description: '미니룸을 밝혀주는 사랑스러운 풍선',
+  },
+  {
+    id: 'gift-wreath',
+    name: '축하 화환',
+    emoji: '🌺',
+    price: 10,
+    description: '결혼식장에 빠질 수 없는 축하 화환',
+  },
+  {
+    id: 'gift-champagne',
+    name: '축하 샴페인',
+    emoji: '🥂',
+    price: 10,
+    description: '두 사람의 행복을 위한 건배',
+  },
+  {
+    id: 'gift-cake',
+    name: '웨딩 2단 케이크',
+    emoji: '🎂',
+    price: 15,
+    description: '달콤한 앞날을 기원하는 웨딩 케이크',
+  },
+  {
+    id: 'gift-ring',
+    name: '영원한 반지 쿠션',
+    emoji: '💍',
+    price: 20,
+    description: '평생의 약속을 빛내는 링 쿠션',
+  },
+];
 
 export interface QuizQuestion {
   id: string;

@@ -1,12 +1,16 @@
 import { 
+  collection,
   doc, 
   getDoc, 
   setDoc, 
+  addDoc,
+  deleteDoc,
   updateDoc, 
-  onSnapshot 
+  onSnapshot,
+  increment
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { ACORN_CONFIG } from '../config/weddingConfig';
+import { ACORN_CONFIG, MiniroomGiftProduct } from '../config/weddingConfig';
 import { bgmPlayer } from '../utils/soundSynthesizer';
 
 export interface UserAcornProfile {
@@ -15,11 +19,15 @@ export interface UserAcornProfile {
     welcome?: boolean;
     guestbook?: boolean;
     ilchon?: boolean;
+    miniroomGift?: boolean;
   };
   eligible?: {
     ilchon?: boolean;
     guestbook?: boolean;
+    miniroomGift?: boolean;
   };
+  purchasedGiftIds?: string[];
+  displayedGiftIds?: string[];
   answeredQuestionIds?: string[];
   quizDaily?: {
     date: string;
@@ -29,9 +37,26 @@ export interface UserAcornProfile {
   updatedAt?: string;
 }
 
+export interface DisplayedMiniroomGift {
+  id: string;
+  giftId: string;
+  name: string;
+  emoji: string;
+  senderName: string;
+  senderUid?: string;
+  createdAt: string;
+}
+
 const USERS_PATH = 'users';
+const MINIROOM_GIFTS_PATH = 'miniroomGifts';
+const MINIROOM_STATS_PATH = 'miniroomStats';
+const HEARTS_DOC_ID = 'hearts';
 const LOCAL_PROFILE_KEY_PREFIX = 'cyworld_acorn_profile_v1_';
 const LOCAL_EVENT_NAME = 'cyworld-acorn-profile-updated';
+const LOCAL_GIFTS_KEY = 'cyworld_miniroom_gifts_v1';
+const LOCAL_GIFTS_EVENT_NAME = 'cyworld-miniroom-gifts-updated';
+const LOCAL_HEARTS_KEY = 'cyworld_miniroom_hearts_v1';
+const LOCAL_HEARTS_EVENT_NAME = 'cyworld-miniroom-hearts-updated';
 
 export class AcornService {
   /**
@@ -54,6 +79,8 @@ export class AcornService {
       acorns: 0,
       claimed: {},
       eligible: {},
+      purchasedGiftIds: [],
+      displayedGiftIds: [],
       answeredQuestionIds: [],
       quizDaily: { date: this.getTodayString(), earned: 0 },
     };
@@ -79,9 +106,11 @@ export class AcornService {
   private static writeLocalProfile(uid: string | undefined, profile: UserAcornProfile): void {
     try {
       const normalized: UserAcornProfile = {
-        acorns: profile.acorns || 0,
+        acorns: Math.max(0, profile.acorns || 0),
         claimed: profile.claimed || {},
         eligible: profile.eligible || {},
+        purchasedGiftIds: profile.purchasedGiftIds || [],
+        displayedGiftIds: profile.displayedGiftIds || [],
         answeredQuestionIds: profile.answeredQuestionIds || [],
         quizDaily: profile.quizDaily || { date: this.getTodayString(), earned: 0 },
         createdAt: profile.createdAt,
@@ -95,17 +124,29 @@ export class AcornService {
   }
 
   private static mergeProfiles(remote: UserAcornProfile, local: UserAcornProfile): UserAcornProfile {
+    const remoteTime = remote.updatedAt ? Date.parse(remote.updatedAt) : 0;
+    const localTime = local.updatedAt ? Date.parse(local.updatedAt) : 0;
+    const preferRemoteAcorns = remoteTime >= localTime || (remote.purchasedGiftIds?.length || 0) >= (local.purchasedGiftIds?.length || 0);
+
     return {
-      acorns: Math.max(remote.acorns || 0, local.acorns || 0),
+      acorns: preferRemoteAcorns ? (remote.acorns ?? 0) : (local.acorns ?? 0),
       claimed: {
         welcome: !!(remote.claimed?.welcome || local.claimed?.welcome),
         guestbook: !!(remote.claimed?.guestbook || local.claimed?.guestbook),
         ilchon: !!(remote.claimed?.ilchon || local.claimed?.ilchon),
+        miniroomGift: !!(remote.claimed?.miniroomGift || local.claimed?.miniroomGift),
       },
       eligible: {
         ilchon: !!(remote.eligible?.ilchon || local.eligible?.ilchon),
         guestbook: !!(remote.eligible?.guestbook || local.eligible?.guestbook),
+        miniroomGift: !!(remote.eligible?.miniroomGift || local.eligible?.miniroomGift),
       },
+      purchasedGiftIds: Array.from(
+        new Set([...(remote.purchasedGiftIds || []), ...(local.purchasedGiftIds || [])])
+      ),
+      displayedGiftIds: Array.from(
+        new Set([...(remote.displayedGiftIds || []), ...(local.displayedGiftIds || [])])
+      ),
       answeredQuestionIds: Array.from(
         new Set([...(remote.answeredQuestionIds || []), ...(local.answeredQuestionIds || [])])
       ),
@@ -115,7 +156,7 @@ export class AcornService {
           ? remote.quizDaily || { date: this.getTodayString(), earned: 0 }
           : local.quizDaily || { date: this.getTodayString(), earned: 0 },
       createdAt: remote.createdAt || local.createdAt,
-      updatedAt: remote.updatedAt || local.updatedAt,
+      updatedAt: remoteTime >= localTime ? remote.updatedAt : local.updatedAt,
     };
   }
 
@@ -155,6 +196,8 @@ export class AcornService {
             acorns: data.acorns || 0,
             claimed: data.claimed || {},
             eligible: data.eligible || {},
+            purchasedGiftIds: data.purchasedGiftIds || [],
+            displayedGiftIds: data.displayedGiftIds || [],
             answeredQuestionIds: data.answeredQuestionIds || [],
             quizDaily: data.quizDaily || { date: this.getTodayString(), earned: 0 },
             createdAt: data.createdAt,
@@ -635,6 +678,431 @@ export class AcornService {
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `${USERS_PATH}/${uid}`);
       return { rewarded: false, earnedDelta: 0 };
+    }
+  }
+
+  // ==================== MINIROOM GIFTS METHODS ====================
+
+  private static readLocalMiniroomGifts(): DisplayedMiniroomGift[] {
+    try {
+      const raw = localStorage.getItem(LOCAL_GIFTS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private static writeLocalMiniroomGifts(gifts: DisplayedMiniroomGift[]): void {
+    try {
+      localStorage.setItem(LOCAL_GIFTS_KEY, JSON.stringify(gifts));
+      window.dispatchEvent(new CustomEvent(LOCAL_GIFTS_EVENT_NAME, { detail: gifts }));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  /**
+   * Subscribe to gifts displayed in the Miniroom (Firestore + localStorage fallback).
+   */
+  public static subscribeMiniroomGifts(
+    onData: (gifts: DisplayedMiniroomGift[]) => void
+  ): () => void {
+    let remoteGifts: DisplayedMiniroomGift[] = [];
+
+    const emitMerged = () => {
+      const localGifts = this.readLocalMiniroomGifts();
+      const map = new Map<string, DisplayedMiniroomGift>();
+      for (const g of remoteGifts) {
+        map.set(g.id, g);
+      }
+      for (const lg of localGifts) {
+        const existsInRemote = remoteGifts.some(
+          (rg) => rg.id === lg.id || (rg.giftId === lg.giftId && rg.createdAt === lg.createdAt)
+        );
+        if (!existsInRemote) {
+          map.set(lg.id, lg);
+        }
+      }
+      const list = Array.from(map.values()).sort((a, b) =>
+        (a.createdAt || '').localeCompare(b.createdAt || '')
+      );
+      onData(list);
+    };
+
+    emitMerged();
+
+    const handleLocalGiftEvent = () => emitMerged();
+    window.addEventListener(LOCAL_GIFTS_EVENT_NAME, handleLocalGiftEvent);
+
+    const unsubFirestore = onSnapshot(
+      collection(db, MINIROOM_GIFTS_PATH),
+      (snapshot) => {
+        remoteGifts = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<DisplayedMiniroomGift, 'id'>),
+        }));
+        emitMerged();
+      },
+      (error) => {
+        console.warn('Firestore miniroomGifts read notice:', error);
+        emitMerged();
+      }
+    );
+
+    return () => {
+      window.removeEventListener(LOCAL_GIFTS_EVENT_NAME, handleLocalGiftEvent);
+      unsubFirestore();
+    };
+  }
+
+  /**
+   * Purchase a gift item from the Gift Shelf using acorns.
+   * Does NOT unlock the Miniroom mission until the user actually displays the gift in the Miniroom.
+   */
+  public static async purchaseGift(
+    uid: string,
+    gift: MiniroomGiftProduct
+  ): Promise<{ success: boolean; reason?: 'insufficient_acorns' | 'already_purchased' }> {
+    const local = this.readLocalProfile(uid);
+    const owned = local.purchasedGiftIds || [];
+    if (owned.includes(gift.id)) {
+      return { success: false, reason: 'already_purchased' };
+    }
+    if ((local.acorns || 0) < gift.price) {
+      return { success: false, reason: 'insufficient_acorns' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextAcorns = Math.max(0, (local.acorns || 0) - gift.price);
+    const nextPurchased = [...owned, gift.id];
+
+    const updatedLocal: UserAcornProfile = {
+      ...local,
+      acorns: nextAcorns,
+      purchasedGiftIds: nextPurchased,
+      updatedAt: nowIso,
+    };
+
+    if (!uid) {
+      this.writeLocalProfile(uid, updatedLocal);
+      bgmPlayer.playChime();
+      return { success: true };
+    }
+
+    const docRef = doc(db, USERS_PATH, uid);
+    try {
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data() as UserAcornProfile;
+        const remoteOwned = data.purchasedGiftIds || [];
+        if (remoteOwned.includes(gift.id)) {
+          return { success: false, reason: 'already_purchased' };
+        }
+        const remoteAcorns = data.acorns || 0;
+        if (remoteAcorns < gift.price) {
+          return { success: false, reason: 'insufficient_acorns' };
+        }
+        const serverNextAcorns = Math.max(0, remoteAcorns - gift.price);
+        const serverNextPurchased = [...remoteOwned, gift.id];
+        await updateDoc(docRef, {
+          acorns: serverNextAcorns,
+          purchasedGiftIds: serverNextPurchased,
+          updatedAt: nowIso,
+        });
+        this.writeLocalProfile(uid, {
+          ...data,
+          acorns: serverNextAcorns,
+          purchasedGiftIds: serverNextPurchased,
+          updatedAt: nowIso,
+        });
+      } else {
+        this.writeLocalProfile(uid, updatedLocal);
+      }
+      bgmPlayer.playChime();
+      return { success: true };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `${USERS_PATH}/${uid}`);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Display a purchased gift in the Miniroom and unlock the '미니룸에 선물 보내기' mission reward button.
+   */
+  public static async displayGiftInMiniroom(
+    uid: string,
+    gift: MiniroomGiftProduct,
+    senderName?: string
+  ): Promise<void> {
+    const nowIso = new Date().toISOString();
+    const cleanSender = (senderName || '').trim().slice(0, 30) || '축하 하객';
+    const local = this.readLocalProfile(uid);
+
+    const nextDisplayed = Array.from(new Set([...(local.displayedGiftIds || []), gift.id]));
+    const updatedLocal: UserAcornProfile = {
+      ...local,
+      displayedGiftIds: nextDisplayed,
+      eligible: { ...(local.eligible || {}), miniroomGift: true },
+      updatedAt: nowIso,
+    };
+    this.writeLocalProfile(uid, updatedLocal);
+
+    const giftPayload = {
+      giftId: gift.id.slice(0, 50),
+      name: gift.name.slice(0, 50),
+      emoji: gift.emoji.slice(0, 10),
+      senderName: cleanSender,
+      senderUid: (uid || 'guest').slice(0, 128),
+      createdAt: nowIso,
+    };
+
+    try {
+      const docRef = await addDoc(collection(db, MINIROOM_GIFTS_PATH), giftPayload);
+      const currentLocalGifts = this.readLocalMiniroomGifts();
+      this.writeLocalMiniroomGifts([
+        ...currentLocalGifts,
+        { id: docRef.id, ...giftPayload },
+      ]);
+    } catch (error) {
+      console.warn('Firestore miniroomGift display fallback to local:', error);
+      const currentLocalGifts = this.readLocalMiniroomGifts();
+      this.writeLocalMiniroomGifts([
+        ...currentLocalGifts,
+        { id: `local-gift-${Date.now()}`, ...giftPayload },
+      ]);
+    }
+
+    if (uid) {
+      const userRef = doc(db, USERS_PATH, uid);
+      try {
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          const data = snap.data() as UserAcornProfile;
+          const serverDisplayed = Array.from(new Set([...(data.displayedGiftIds || []), gift.id]));
+          await updateDoc(userRef, {
+            displayedGiftIds: serverDisplayed,
+            'eligible.miniroomGift': true,
+            updatedAt: nowIso,
+          });
+        }
+      } catch (error) {
+        console.warn('Firestore user displayedGiftIds sync notice:', error);
+      }
+    }
+
+    bgmPlayer.playChime();
+  }
+
+  /**
+   * Claim the '미니룸에 선물 보내기' reward (+10 acorns) after purchasing & displaying a gift in Miniroom.
+   */
+  public static async claimMiniroomGiftReward(
+    uid: string,
+    onShowToast: (msg: string) => void
+  ): Promise<void> {
+    const local = this.readLocalProfile(uid);
+    if (local.claimed?.miniroomGift || !local.eligible?.miniroomGift) return;
+
+    const nowIso = new Date().toISOString();
+
+    if (!uid) {
+      const updated: UserAcornProfile = {
+        ...local,
+        acorns: (local.acorns || 0) + ACORN_CONFIG.MINIROOM_GIFT_REWARD,
+        claimed: { ...local.claimed, miniroomGift: true },
+        eligible: { ...local.eligible, miniroomGift: true },
+        updatedAt: nowIso,
+      };
+      this.writeLocalProfile(uid, updated);
+      bgmPlayer.playChime();
+      onShowToast(`🌰 +${ACORN_CONFIG.MINIROOM_GIFT_REWARD} 도토리 스토어에서 확인해보세요`);
+      return;
+    }
+
+    const docRef = doc(db, USERS_PATH, uid);
+    try {
+      const snap = await getDoc(docRef);
+      if (!snap.exists()) {
+        const initialProfile: UserAcornProfile = {
+          acorns: ACORN_CONFIG.MINIROOM_GIFT_REWARD,
+          claimed: {
+            welcome: !!local.claimed?.welcome,
+            guestbook: !!local.claimed?.guestbook,
+            ilchon: !!local.claimed?.ilchon,
+            miniroomGift: true,
+          },
+          eligible: {
+            ...local.eligible,
+            miniroomGift: true,
+          },
+          purchasedGiftIds: local.purchasedGiftIds || [],
+          displayedGiftIds: local.displayedGiftIds || [],
+          answeredQuestionIds: local.answeredQuestionIds || [],
+          quizDaily: local.quizDaily || { date: this.getTodayString(), earned: 0 },
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        await setDoc(docRef, initialProfile);
+        this.writeLocalProfile(uid, initialProfile);
+        bgmPlayer.playChime();
+        onShowToast(`🌰 +${ACORN_CONFIG.MINIROOM_GIFT_REWARD} 도토리 스토어에서 확인해보세요`);
+      } else {
+        const data = snap.data() as UserAcornProfile;
+        if (!data.claimed?.miniroomGift) {
+          const currentAcorns = data.acorns || 0;
+          const nextAcorns = currentAcorns + ACORN_CONFIG.MINIROOM_GIFT_REWARD;
+          await updateDoc(docRef, {
+            acorns: nextAcorns,
+            'claimed.miniroomGift': true,
+            'eligible.miniroomGift': true,
+            updatedAt: nowIso,
+          });
+          this.writeLocalProfile(uid, {
+            ...data,
+            acorns: nextAcorns,
+            claimed: { ...(data.claimed || {}), miniroomGift: true },
+            eligible: { ...(data.eligible || {}), miniroomGift: true },
+            updatedAt: nowIso,
+          });
+          bgmPlayer.playChime();
+          onShowToast(`🌰 +${ACORN_CONFIG.MINIROOM_GIFT_REWARD} 도토리 스토어에서 확인해보세요`);
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `${USERS_PATH}/${uid}`);
+    }
+  }
+
+  /**
+   * Admin helper to remove a displayed miniroom gift.
+   */
+  public static async deleteMiniroomGift(giftDocId: string): Promise<void> {
+    const localGifts = this.readLocalMiniroomGifts().filter((g) => g.id !== giftDocId);
+    this.writeLocalMiniroomGifts(localGifts);
+    if (!giftDocId.startsWith('local-gift-')) {
+      try {
+        await deleteDoc(doc(db, MINIROOM_GIFTS_PATH, giftDocId));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `${MINIROOM_GIFTS_PATH}/${giftDocId}`);
+      }
+    }
+  }
+
+  // ==================== MINIROOM CELEBRATION HEARTS METHODS ====================
+
+  public static getCachedMiniroomHearts(): number {
+    try {
+      const raw = localStorage.getItem(LOCAL_HEARTS_KEY);
+      if (!raw) return 0;
+      const parsed = parseInt(raw, 10);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private static setCachedMiniroomHearts(count: number, dispatchEvent = true): void {
+    const normalized = Math.max(0, Math.floor(count));
+    try {
+      localStorage.setItem(LOCAL_HEARTS_KEY, String(normalized));
+      if (dispatchEvent) {
+        window.dispatchEvent(new CustomEvent(LOCAL_HEARTS_EVENT_NAME, { detail: normalized }));
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  /**
+   * Real-time subscription to accumulated celebration hearts in the Miniroom.
+   * Syncs across app tabs, browser tabs, and visitors via Firestore + local cache.
+   */
+  public static subscribeMiniroomHearts(onData: (count: number) => void): () => void {
+    onData(this.getCachedMiniroomHearts());
+
+    const handleLocalEvent = (e: Event) => {
+      const custom = e as CustomEvent<number>;
+      if (typeof custom.detail === 'number') {
+        onData(custom.detail);
+      } else {
+        onData(this.getCachedMiniroomHearts());
+      }
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === LOCAL_HEARTS_KEY) {
+        onData(this.getCachedMiniroomHearts());
+      }
+    };
+
+    window.addEventListener(LOCAL_HEARTS_EVENT_NAME, handleLocalEvent);
+    window.addEventListener('storage', handleStorageEvent);
+
+    const unsubFirestore = onSnapshot(
+      doc(db, MINIROOM_STATS_PATH, HEARTS_DOC_ID),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const remoteCount =
+            typeof data?.count === 'number' && Number.isFinite(data.count)
+              ? Math.max(0, Math.floor(data.count))
+              : 0;
+          this.setCachedMiniroomHearts(remoteCount, false);
+          onData(remoteCount);
+        } else {
+          this.setCachedMiniroomHearts(0, false);
+          onData(0);
+        }
+      },
+      (error) => {
+        console.warn('Firestore miniroomStats hearts read notice:', error);
+        onData(this.getCachedMiniroomHearts());
+      }
+    );
+
+    return () => {
+      window.removeEventListener(LOCAL_HEARTS_EVENT_NAME, handleLocalEvent);
+      window.removeEventListener('storage', handleStorageEvent);
+      unsubFirestore();
+    };
+  }
+
+  /**
+   * Increment accumulated celebration hearts by +1 cleanly and atomically.
+   */
+  public static async incrementMiniroomHearts(): Promise<void> {
+    const optimistic = this.getCachedMiniroomHearts() + 1;
+    this.setCachedMiniroomHearts(optimistic, true);
+
+    try {
+      await setDoc(
+        doc(db, MINIROOM_STATS_PATH, HEARTS_DOC_ID),
+        {
+          count: increment(1),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.warn('Firestore miniroomStats hearts increment notice:', error);
+    }
+  }
+
+  /**
+   * Reset accumulated celebration hearts to 0 (Admin only).
+   */
+  public static async resetMiniroomHearts(): Promise<void> {
+    const docPath = `${MINIROOM_STATS_PATH}/${HEARTS_DOC_ID}`;
+    try {
+      await setDoc(doc(db, MINIROOM_STATS_PATH, HEARTS_DOC_ID), {
+        count: 0,
+        updatedAt: new Date().toISOString(),
+      });
+      this.setCachedMiniroomHearts(0, true);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, docPath);
     }
   }
 }
