@@ -144,7 +144,10 @@
         "emoji": { "type": "string", "maxLength": 10 },
         "senderName": { "type": "string", "maxLength": 30 },
         "senderUid": { "type": "string", "maxLength": 128 },
-        "createdAt": { "type": "string", "maxLength": 40 }
+        "createdAt": { "type": "string", "maxLength": 40 },
+        "posX": { "type": "number" },
+        "posY": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 40 }
       },
       "required": ["giftId", "name", "emoji", "senderName", "createdAt"]
     },

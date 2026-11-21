@@ -229,7 +229,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         </div>
 
         <div className="space-y-2">
-          {/* 1) 첫 방문 입장 축하 선물 */}
+          {/* 1) 첫 방문 감사 선물 */}
           <div
             className={`p-2.5 rounded-lg border-2 border-[#3B2F2F] flex items-center justify-between gap-2 text-xs font-pixel transition-all ${
               profile.claimed?.welcome
@@ -240,7 +240,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
             <div className="space-y-0.5 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[#3B2F2F] font-bold">
-                  첫 방문 입장 축하 선물
+                  첫 방문 감사 선물
                 </span>
                 <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
                   +{ACORN_CONFIG.WELCOME_REWARD} 🌰
@@ -468,8 +468,17 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
               >
                 <div className="space-y-1.5">
                   <div className="flex items-start justify-between gap-1">
-                    <div className="w-10 h-10 rounded-lg bg-white border-2 border-[#3B2F2F] flex items-center justify-center text-2xl shadow-[1px_1px_0_#3B2F2F] shrink-0">
-                      {gift.emoji}
+                    <div className="w-10 h-10 rounded-lg bg-white border-2 border-[#3B2F2F] flex items-center justify-center text-2xl shadow-[1px_1px_0_#3B2F2F] shrink-0 overflow-hidden p-1">
+                      {gift.imageUrl ? (
+                        <img
+                          src={gift.imageUrl}
+                          alt={gift.name}
+                          className="w-full h-full object-contain"
+                          style={{ imageRendering: 'pixelated' }}
+                        />
+                      ) : (
+                        gift.emoji
+                      )}
                     </div>
                     <span className="font-pixel text-[10px] font-bold bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] px-1.5 py-0.5 rounded">
                       🌰 {gift.price}개
@@ -556,8 +565,17 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
             </div>
 
             <div className="bg-[#FAF7F0] border-2 border-[#3B2F2F] rounded-lg p-3 flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg bg-white border-2 border-[#3B2F2F] flex items-center justify-center text-3xl shrink-0">
-                {selectedGiftModal.gift.emoji}
+              <div className="w-12 h-12 rounded-lg bg-white border-2 border-[#3B2F2F] flex items-center justify-center text-3xl shrink-0 overflow-hidden p-1">
+                {selectedGiftModal.gift.imageUrl ? (
+                  <img
+                    src={selectedGiftModal.gift.imageUrl}
+                    alt={selectedGiftModal.gift.name}
+                    className="w-full h-full object-contain"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                ) : (
+                  selectedGiftModal.gift.emoji
+                )}
               </div>
               <div className="space-y-0.5 text-xs">
                 <div className="font-pixel font-bold text-[#3B2F2F]">

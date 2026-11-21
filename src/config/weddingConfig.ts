@@ -386,6 +386,10 @@ export interface MiniroomGiftProduct {
   emoji: string;
   price: number;
   description: string;
+  imageUrl?: string;
+  miniroomImageUrl?: string;
+  miniroomSizeClass?: string;
+  placement?: 'top' | 'bottom';
 }
 
 export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
@@ -397,18 +401,40 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
     description: '향기로운 축하 마음을 담은 부케',
   },
   {
-    id: 'gift-balloon',
-    name: '러브 하트 풍선',
+    id: 'gift-heart-balloon',
+    name: '하트 풍선',
     emoji: '🎈',
     price: 5,
-    description: '미니룸을 밝혀주는 사랑스러운 풍선',
+    description: '미니룸 상단을 밝혀주는 사랑스러운 하트 풍선',
+    imageUrl: '/assets/aistudio/gift_heart_balloon_v3_x3_d3725024.png',
+    placement: 'top',
   },
   {
-    id: 'gift-wreath',
-    name: '축하 화환',
+    id: 'gift-wreath-pink',
+    name: '축하 화환(분홍)',
     emoji: '🌺',
     price: 10,
-    description: '결혼식장에 빠질 수 없는 축하 화환',
+    description: '사랑스러운 분홍 리본의 축하 화환',
+    imageUrl: '/assets/aistudio/gift_wreath_v4_pink_x3_8b4bfe69.png',
+    placement: 'bottom',
+  },
+  {
+    id: 'gift-wreath-yellow',
+    name: '축하 화환(노랑)',
+    emoji: '🌼',
+    price: 10,
+    description: '화사한 노랑 리본의 축하 화환',
+    imageUrl: '/assets/aistudio/gift_wreath_v4_yellow_x3_a59c27dd.png',
+    placement: 'bottom',
+  },
+  {
+    id: 'gift-wreath-red',
+    name: '축하 화환(빨강)',
+    emoji: '🌹',
+    price: 10,
+    description: '축복이 가득 담긴 빨강 리본의 축하 화환',
+    imageUrl: '/assets/aistudio/gift_wreath_v4_red_x3_47b0e536.png',
+    placement: 'bottom',
   },
   {
     id: 'gift-champagne',
@@ -430,6 +456,9 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
     emoji: '💍',
     price: 20,
     description: '평생의 약속을 빛내는 링 쿠션',
+    miniroomImageUrl: '/assets/gift_ring_x3.png',
+    miniroomSizeClass: 'w-8 h-8',
+    placement: 'bottom',
   },
 ];
 

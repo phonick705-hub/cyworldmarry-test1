@@ -7,7 +7,8 @@ import {
   deleteDoc,
   updateDoc, 
   onSnapshot,
-  increment
+  increment,
+  deleteField
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { ACORN_CONFIG, MiniroomGiftProduct } from '../config/weddingConfig';
@@ -46,6 +47,9 @@ export interface DisplayedMiniroomGift {
   senderName: string;
   senderUid?: string;
   createdAt: string;
+  posX?: number;
+  posY?: number;
+  updatedAt?: string;
 }
 
 const USERS_PATH = 'users';
@@ -991,6 +995,67 @@ export class AcornService {
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `${USERS_PATH}/${uid}`);
     }
+  }
+
+  /**
+   * Admin helper to update a displayed miniroom gift's custom position (0-100 percentage).
+   */
+  public static async updateMiniroomGiftPosition(
+    giftDocId: string,
+    posX: number,
+    posY: number
+  ): Promise<void> {
+    const clampedX = Math.round(Math.max(0, Math.min(100, posX)) * 10) / 10;
+    const clampedY = Math.round(Math.max(0, Math.min(100, posY)) * 10) / 10;
+    const nowIso = new Date().toISOString();
+
+    const localGifts = this.readLocalMiniroomGifts().map((g) =>
+      g.id === giftDocId ? { ...g, posX: clampedX, posY: clampedY, updatedAt: nowIso } : g
+    );
+    this.writeLocalMiniroomGifts(localGifts);
+
+    if (!giftDocId.startsWith('local-gift-')) {
+      try {
+        await updateDoc(doc(db, MINIROOM_GIFTS_PATH, giftDocId), {
+          posX: clampedX,
+          posY: clampedY,
+          updatedAt: nowIso,
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `${MINIROOM_GIFTS_PATH}/${giftDocId}`);
+      }
+    }
+  }
+
+  /**
+   * Admin helper to reset one or all miniroom gifts back to default placement.
+   */
+  public static async resetMiniroomGiftPositions(giftDocIds: string[]): Promise<void> {
+    if (giftDocIds.length === 0) return;
+    const idSet = new Set(giftDocIds);
+    const nowIso = new Date().toISOString();
+
+    const localGifts = this.readLocalMiniroomGifts().map((g) => {
+      if (!idSet.has(g.id)) return g;
+      const { posX: _x, posY: _y, ...rest } = g;
+      return { ...rest, updatedAt: nowIso };
+    });
+    this.writeLocalMiniroomGifts(localGifts);
+
+    const remoteIds = giftDocIds.filter((id) => !id.startsWith('local-gift-'));
+    await Promise.all(
+      remoteIds.map(async (id) => {
+        try {
+          await updateDoc(doc(db, MINIROOM_GIFTS_PATH, id), {
+            posX: deleteField(),
+            posY: deleteField(),
+            updatedAt: nowIso,
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `${MINIROOM_GIFTS_PATH}/${id}`);
+        }
+      })
+    );
   }
 
   /**

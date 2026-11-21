@@ -100,7 +100,29 @@ service cloud.firestore {
         && incoming().createdAt is string
         && incoming().createdAt.size() <= 40;
 
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin()
+        && incoming().keys().hasAll(['giftId', 'name', 'emoji', 'senderName', 'createdAt'])
+        && incoming().keys().hasOnly(['giftId', 'name', 'emoji', 'senderName', 'senderUid', 'createdAt', 'posX', 'posY', 'updatedAt'])
+        && incoming().giftId is string
+        && incoming().giftId.size() > 0
+        && incoming().giftId.size() <= 50
+        && incoming().name is string
+        && incoming().name.size() > 0
+        && incoming().name.size() <= 50
+        && incoming().emoji is string
+        && incoming().emoji.size() > 0
+        && incoming().emoji.size() <= 10
+        && incoming().senderName is string
+        && incoming().senderName.size() > 0
+        && incoming().senderName.size() <= 30
+        && (!('senderUid' in incoming()) || (incoming().senderUid is string && incoming().senderUid.size() <= 128))
+        && incoming().createdAt is string
+        && incoming().createdAt.size() <= 40
+        && (!('posX' in incoming()) || (incoming().posX is number && incoming().posX >= 0 && incoming().posX <= 100))
+        && (!('posY' in incoming()) || (incoming().posY is number && incoming().posY >= 0 && incoming().posY <= 100))
+        && (!('updatedAt' in incoming()) || (incoming().updatedAt is string && incoming().updatedAt.size() <= 40));
+
+      allow delete: if isAdmin();
     }
 
     // Miniroom Celebration Heart Counter (accumulated across visitors & tabs; resettable only by Admin)
