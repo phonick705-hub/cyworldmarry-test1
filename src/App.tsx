@@ -12,15 +12,16 @@ import { DotoriStore } from './components/DotoriStore';
 import { TabBar, TabType } from './components/TabBar';
 import { Toast } from './components/Toast';
 import { AdminLoginModal } from './components/AdminLoginModal';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { WeddingDataService } from './services/weddingDataService';
 import { WEDDING_CONFIG } from './config/weddingConfig';
 import { bgmPlayer } from './utils/soundSynthesizer';
 
 function MainApp() {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('invitation');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [guestbookCount, setGuestbookCount] = useState<number>(26);
+  const [guestbookCount, setGuestbookCount] = useState<number>(0);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -30,14 +31,18 @@ function MainApp() {
   };
 
   useEffect(() => {
+    if (isAdmin) {
+      WeddingDataService.cleanupSampleGuestbookEntries();
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
     // 1. Check and seed initial Firestore data if empty
     WeddingDataService.autoSeedIfEmpty();
 
     // 2. Realtime listener for guestbook count synchronization
     const unsubscribe = WeddingDataService.subscribeGuestbook((items) => {
-      if (items && items.length > 0) {
-        setGuestbookCount(items.length);
-      }
+      setGuestbookCount(items.length);
     });
 
     return () => {

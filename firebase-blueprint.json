@@ -120,6 +120,7 @@
         },
         "purchasedGiftIds": { "type": "array" },
         "displayedGiftIds": { "type": "array" },
+        "pendingGiftIds": { "type": "array" },
         "answeredQuestionIds": { "type": "array" },
         "quizDaily": {
           "type": "object",

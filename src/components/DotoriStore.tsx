@@ -116,12 +116,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
       const uid = currentUser?.uid || '';
       const res = await AcornService.purchaseGift(uid, selectedGiftModal.gift);
       if (!res.success) {
-        if (res.reason === 'insufficient_acorns') {
-          onShowToast('보유한 도토리가 부족해요! 미션을 통해 도토리를 모아보세요 🌰');
-        } else {
-          onShowToast('이미 구매한 상품이에요! 바로 미니룸에 진열해보세요.');
-          setSelectedGiftModal({ gift: selectedGiftModal.gift, step: 'display' });
-        }
+        onShowToast('보유한 도토리가 부족해요! 미션을 통해 도토리를 모아보세요 🌰');
         return;
       }
       onShowToast(`🛍️ '${selectedGiftModal.gift.name}' 구매 완료! 이제 미니룸에 진열해보세요.`);
@@ -164,8 +159,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
 
   const isMiniroomGiftCompleted = !!profile.claimed?.miniroomGift;
   const isMiniroomGiftEligible = !!profile.eligible?.miniroomGift;
-  const purchasedIds = profile.purchasedGiftIds || [];
-  const displayedIds = profile.displayedGiftIds || [];
+  const pendingGiftIds = profile.pendingGiftIds || [];
 
   return (
     <div className="w-full space-y-4 animate-fadeIn">
@@ -460,19 +454,16 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         {/* Gift Items Grid */}
         <div className="grid grid-cols-2 gap-2.5">
           {MINIROOM_GIFT_PRODUCTS.map((gift) => {
-            const isDisplayed = displayedIds.includes(gift.id);
-            const isPurchased = purchasedIds.includes(gift.id);
+            const hasPendingDisplay = pendingGiftIds.includes(gift.id);
             const canAfford = profile.acorns >= gift.price;
 
             return (
               <div
                 key={gift.id}
                 className={`rounded-lg border-2 border-[#3B2F2F] p-2.5 flex flex-col justify-between gap-2 transition-all ${
-                  isDisplayed
-                    ? 'bg-[#F4FBF7] shadow-[2px_2px_0_#51CF66]'
-                    : isPurchased
-                      ? 'bg-[#FFF9DB] shadow-[2px_2px_0_#FCC419]'
-                      : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
+                  hasPendingDisplay
+                    ? 'bg-[#FFF9DB] shadow-[2px_2px_0_#FCC419]'
+                    : 'bg-[#FFFDF9] shadow-[2px_2px_0_#3B2F2F]'
                 }`}
               >
                 <div className="space-y-1.5">
@@ -497,16 +488,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
 
                 {/* Action Button */}
                 <div className="pt-1">
-                  {isDisplayed ? (
-                    <button
-                      type="button"
-                      onClick={() => onNavigateTab('invitation')}
-                      className="w-full py-1.5 px-2 rounded text-[11px] font-pixel bg-[#EBFBEE] text-[#2B8A3E] border border-[#B2F2BB] flex items-center justify-center gap-1 cursor-pointer hover:brightness-95"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#40C057]" />
-                      <span>진열 완료 · 보기</span>
-                    </button>
-                  ) : isPurchased ? (
+                  {hasPendingDisplay ? (
                     <button
                       type="button"
                       onClick={() => {

@@ -100,13 +100,14 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
       // 1. Approve ilchon
       await WeddingDataService.approveIlchon(item.id);
 
-      // 2. Automatically upload celebration message to Guestbook when ilchon is approved
+      // 2. Automatically upload celebration message to Guestbook using the original ilchon request timestamp
       await WeddingDataService.addGuestbook({
         authorName: item.name,
         ilchonName: item.ilchonName,
         emoji: item.emoji || '🤝',
         message: item.message,
         authorUid: item.authorUid || currentUser?.uid || 'admin',
+        createdAt: item.createdAt,
       });
 
       bgmPlayer.playChime();
@@ -196,6 +197,12 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
                       대기중
                     </span>
                   </div>
+
+                  {item.createdAt && (
+                    <div className="text-[10px] font-pixel text-[#888888]">
+                      신청 시간: {WeddingDataService.formatGuestbookTimestamp(item.createdAt)}
+                    </div>
+                  )}
 
                   <p className="font-body text-[11px] text-[#444444] bg-[#FAF7F0] p-1.5 rounded">
                     &ldquo;{item.message}&rdquo;

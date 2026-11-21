@@ -204,7 +204,7 @@ export const Miniroom: React.FC<MiniroomProps> = ({
         {/* Displayed Miniroom Gifts Shelf (above bottom caption bubble) */}
         {displayedGifts.length > 0 && (
           <div className="absolute bottom-12 left-2.5 right-2.5 z-10 flex flex-wrap items-end justify-start gap-1.5 pointer-events-none">
-            {displayedGifts.slice(-8).map((gift) => (
+            {displayedGifts.slice(-10).map((gift) => (
               <div
                 key={gift.id}
                 onClick={(e) => handleGiftClick(e, gift)}

@@ -374,8 +374,19 @@ export const Guestbook: React.FC<GuestbookProps> = ({ onShowToast, onEntryAdded,
         </div>
 
         <div className="space-y-2.5">
-          <AnimatePresence initial={false}>
-            {entries.map((entry, index) => {
+          {entries.length === 0 ? (
+            <div className="retro-box p-6 bg-white text-center space-y-1.5 shadow-[3px_3px_0_#3B2F2F]">
+              <div className="text-2xl">💌</div>
+              <p className="font-pixel text-xs text-[#666666]">
+                아직 등록된 방명록이 없어요.
+              </p>
+              <p className="font-body text-[11px] text-[#999999]">
+                첫 번째 축하 메시지를 남겨보세요!
+              </p>
+            </div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {entries.map((entry, index) => {
               const likeCount = likedEntries[entry.id] || 0;
               const isAuthor = currentUser?.uid && entry.authorUid === currentUser.uid;
               const canDelete = isAuthor || isAdmin;
@@ -550,7 +561,8 @@ export const Guestbook: React.FC<GuestbookProps> = ({ onShowToast, onEntryAdded,
                 </motion.div>
               );
             })}
-          </AnimatePresence>
+            </AnimatePresence>
+          )}
         </div>
 
         {/* Device guidance note */}

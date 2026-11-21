@@ -86,26 +86,7 @@ export class WeddingDataService {
         }
       }
 
-      // 2. Check and seed guestbook if empty
-      const gbSnap = await getDocs(query(collection(db, GUESTBOOK_PATH), limit(1)));
-      if (gbSnap.empty) {
-        for (const item of WEDDING_CONFIG.initialGuestbook) {
-          try {
-            await setDoc(doc(db, GUESTBOOK_PATH, item.id), {
-              author: item.author,
-              authorName: item.author.split('(')[0] || item.author,
-              ilchonName: item.author.includes('(') ? item.author.split('(')[1].replace(')', '') : '',
-              emoji: item.emoji,
-              message: item.message,
-              authorUid: 'seed-admin',
-              createdAt: item.createdAt,
-              edited: false,
-            });
-          } catch {
-            // Ignore seed permission if client is anonymous
-          }
-        }
-      }
+      // Guestbook starts empty (no auto-seeding of sample entries)
 
       // 3. Check and seed Ilchons if empty
       const ilchonSnap = await getDocs(query(collection(db, ILCHON_PATH), where('status', '==', 'approved'), limit(1)));
@@ -198,6 +179,25 @@ export class WeddingDataService {
   }
 
   // ==================== GUESTBOOK METHODS ====================
+  private static readonly LEGACY_SAMPLE_GUESTBOOK_IDS = ['gb-1', 'gb-2', 'gb-3', 'gb-4', 'gb-5'];
+
+  /**
+   * Deletes the 5 initial sample guestbook docs (민석, 지원, 수진, 도윤, 성훈) from Firestore when Admin is signed in.
+   */
+  public static async cleanupSampleGuestbookEntries(): Promise<void> {
+    for (const sampleId of this.LEGACY_SAMPLE_GUESTBOOK_IDS) {
+      try {
+        const refDoc = doc(db, GUESTBOOK_PATH, sampleId);
+        const snap = await getDoc(refDoc);
+        if (snap.exists() && snap.data()?.authorUid === 'seed-admin') {
+          await deleteDoc(refDoc);
+        }
+      } catch {
+        // Ignore if unauthorized or already deleted
+      }
+    }
+  }
+
   public static subscribeGuestbook(
     onData: (entries: FirestoreGuestbookItem[]) => void
   ): () => void {
@@ -205,10 +205,18 @@ export class WeddingDataService {
     return onSnapshot(
       q,
       (snapshot) => {
-        const list: FirestoreGuestbookItem[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<FirestoreGuestbookItem, 'id'>),
-        }));
+        const list: FirestoreGuestbookItem[] = snapshot.docs
+          .map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<FirestoreGuestbookItem, 'id'>),
+          }))
+          .filter(
+            (item) =>
+              !(
+                this.LEGACY_SAMPLE_GUESTBOOK_IDS.includes(item.id) &&
+                item.authorUid === 'seed-admin'
+              )
+          );
 
         // Sort latest first
         list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -220,12 +228,22 @@ export class WeddingDataService {
     );
   }
 
+  public static formatGuestbookTimestamp(dateInput?: string): string {
+    if (dateInput && /^\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2}/.test(dateInput.trim())) {
+      return dateInput.trim().slice(0, 40);
+    }
+    const parsed = dateInput ? new Date(dateInput) : new Date();
+    const target = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    return `${target.getFullYear()}.${String(target.getMonth() + 1).padStart(2, '0')}.${String(target.getDate()).padStart(2, '0')} ${String(target.getHours()).padStart(2, '0')}:${String(target.getMinutes()).padStart(2, '0')}`;
+  }
+
   public static async addGuestbook(data: {
     authorName: string;
     ilchonName?: string;
     emoji: string;
     message: string;
     authorUid: string;
+    createdAt?: string;
   }): Promise<string> {
     const name = (data.authorName.trim() || '익명의 일촌').slice(0, 30);
     const ilchon = (data.ilchonName?.trim() || '').slice(0, 30);
@@ -234,8 +252,7 @@ export class WeddingDataService {
     const message = data.message.trim().slice(0, 200);
     const authorUid = (data.authorUid || 'anon').slice(0, 128);
 
-    const now = new Date();
-    const formattedDate = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const formattedDate = this.formatGuestbookTimestamp(data.createdAt);
 
     try {
       const docRef = await addDoc(collection(db, GUESTBOOK_PATH), {
@@ -326,6 +343,7 @@ export class WeddingDataService {
           id: d.id,
           ...(d.data() as Omit<FirestoreIlchonItem, 'id'>),
         }));
+        list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
         onData(list);
       },
       (error) => {

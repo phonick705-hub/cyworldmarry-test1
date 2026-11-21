@@ -65,6 +65,10 @@ service cloud.firestore {
                 incoming().displayedGiftIds is list
                 && incoming().displayedGiftIds.size() <= 30
               ))
+            && (!('pendingGiftIds' in incoming()) || (
+                incoming().pendingGiftIds is list
+                && incoming().pendingGiftIds.size() <= 30
+              ))
             && incoming().claimed is map)
           || isAdmin()
         );

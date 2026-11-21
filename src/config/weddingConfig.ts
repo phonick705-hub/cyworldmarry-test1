@@ -357,44 +357,14 @@ export const WEDDING_CONFIG = {
     },
   ] as IlchonItem[],
 
-  // Default Guestbook Entries
-  initialGuestbook: [
-    {
-      id: 'gb-1',
-      author: '민석(영원한 롤 듀오)',
-      emoji: '🎉',
-      message: '재현아 하은아 결혼 진심으로 축하해! 둘이 서로 배려하면서 알콩달콩 예쁘게 잘 살아라!!',
-      createdAt: '2026.05.02 14:15',
-    },
-    {
-      id: 'gb-2',
-      author: '지원(평생 먹방 메이트)',
-      emoji: '💐',
-      message: '미니룸 진짜 미쳤다 넘 귀여워 ㅠㅠ 하은아 5월의 눈부신 신부 모습 기대할게! 사랑해 내 친구!',
-      createdAt: '2026.05.03 18:32',
-    },
-    {
-      id: 'gb-3',
-      author: '수진(동생 반품 불가)',
-      emoji: '🥰',
-      message: '재현이 장가가는 날만 손꼽아 기다렸다! 올케랑 둘이 싸우지 말고 건강하게 오래오래 행복하길 기도할게.',
-      createdAt: '2026.05.05 11:04',
-    },
-    {
-      id: 'gb-4',
-      author: '도윤(처남 1호)',
-      emoji: '🥂',
-      message: '매형 누나 결혼 축하드려요! 식장에서 제일 멋지게 축하해드릴게요 식사 맛있게 준비해주세요 ㅎㅎ',
-      createdAt: '2026.05.07 19:40',
-    },
-    {
-      id: 'gb-5',
-      author: '성훈(동아리 선배)',
-      emoji: '✨',
-      message: '캠퍼스 커플이 마침내 골인하는 역사적인 날이구나. 언제나 지금의 설렘 기억하며 꽃길만 걸어라!',
-      createdAt: '2026.05.09 21:10',
-    },
-  ],
+  // Default Guestbook Entries (empty by default)
+  initialGuestbook: [] as Array<{
+    id: string;
+    author: string;
+    emoji: string;
+    message: string;
+    createdAt: string;
+  }>,
 };
 
 /**

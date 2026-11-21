@@ -28,6 +28,7 @@ export interface UserAcornProfile {
   };
   purchasedGiftIds?: string[];
   displayedGiftIds?: string[];
+  pendingGiftIds?: string[];
   answeredQuestionIds?: string[];
   quizDaily?: {
     date: string;
@@ -81,6 +82,7 @@ export class AcornService {
       eligible: {},
       purchasedGiftIds: [],
       displayedGiftIds: [],
+      pendingGiftIds: [],
       answeredQuestionIds: [],
       quizDaily: { date: this.getTodayString(), earned: 0 },
     };
@@ -111,6 +113,7 @@ export class AcornService {
         eligible: profile.eligible || {},
         purchasedGiftIds: profile.purchasedGiftIds || [],
         displayedGiftIds: profile.displayedGiftIds || [],
+        pendingGiftIds: profile.pendingGiftIds || [],
         answeredQuestionIds: profile.answeredQuestionIds || [],
         quizDaily: profile.quizDaily || { date: this.getTodayString(), earned: 0 },
         createdAt: profile.createdAt,
@@ -126,10 +129,10 @@ export class AcornService {
   private static mergeProfiles(remote: UserAcornProfile, local: UserAcornProfile): UserAcornProfile {
     const remoteTime = remote.updatedAt ? Date.parse(remote.updatedAt) : 0;
     const localTime = local.updatedAt ? Date.parse(local.updatedAt) : 0;
-    const preferRemoteAcorns = remoteTime >= localTime || (remote.purchasedGiftIds?.length || 0) >= (local.purchasedGiftIds?.length || 0);
+    const preferRemote = remoteTime >= localTime;
 
     return {
-      acorns: preferRemoteAcorns ? (remote.acorns ?? 0) : (local.acorns ?? 0),
+      acorns: preferRemote ? (remote.acorns ?? 0) : (local.acorns ?? 0),
       claimed: {
         welcome: !!(remote.claimed?.welcome || local.claimed?.welcome),
         guestbook: !!(remote.claimed?.guestbook || local.claimed?.guestbook),
@@ -147,6 +150,9 @@ export class AcornService {
       displayedGiftIds: Array.from(
         new Set([...(remote.displayedGiftIds || []), ...(local.displayedGiftIds || [])])
       ),
+      pendingGiftIds: preferRemote
+        ? (remote.pendingGiftIds || [])
+        : (local.pendingGiftIds || []),
       answeredQuestionIds: Array.from(
         new Set([...(remote.answeredQuestionIds || []), ...(local.answeredQuestionIds || [])])
       ),
@@ -156,7 +162,7 @@ export class AcornService {
           ? remote.quizDaily || { date: this.getTodayString(), earned: 0 }
           : local.quizDaily || { date: this.getTodayString(), earned: 0 },
       createdAt: remote.createdAt || local.createdAt,
-      updatedAt: remoteTime >= localTime ? remote.updatedAt : local.updatedAt,
+      updatedAt: preferRemote ? remote.updatedAt : local.updatedAt,
     };
   }
 
@@ -198,6 +204,7 @@ export class AcornService {
             eligible: data.eligible || {},
             purchasedGiftIds: data.purchasedGiftIds || [],
             displayedGiftIds: data.displayedGiftIds || [],
+            pendingGiftIds: data.pendingGiftIds || [],
             answeredQuestionIds: data.answeredQuestionIds || [],
             quizDaily: data.quizDaily || { date: this.getTodayString(), earned: 0 },
             createdAt: data.createdAt,
@@ -759,29 +766,28 @@ export class AcornService {
 
   /**
    * Purchase a gift item from the Gift Shelf using acorns.
+   * Allows purchasing the same gift multiple times.
    * Does NOT unlock the Miniroom mission until the user actually displays the gift in the Miniroom.
    */
   public static async purchaseGift(
     uid: string,
     gift: MiniroomGiftProduct
-  ): Promise<{ success: boolean; reason?: 'insufficient_acorns' | 'already_purchased' }> {
+  ): Promise<{ success: boolean; reason?: 'insufficient_acorns' }> {
     const local = this.readLocalProfile(uid);
-    const owned = local.purchasedGiftIds || [];
-    if (owned.includes(gift.id)) {
-      return { success: false, reason: 'already_purchased' };
-    }
     if ((local.acorns || 0) < gift.price) {
       return { success: false, reason: 'insufficient_acorns' };
     }
 
     const nowIso = new Date().toISOString();
     const nextAcorns = Math.max(0, (local.acorns || 0) - gift.price);
-    const nextPurchased = [...owned, gift.id];
+    const nextPurchased = Array.from(new Set([...(local.purchasedGiftIds || []), gift.id]));
+    const nextPending = [...(local.pendingGiftIds || []), gift.id].slice(-25);
 
     const updatedLocal: UserAcornProfile = {
       ...local,
       acorns: nextAcorns,
       purchasedGiftIds: nextPurchased,
+      pendingGiftIds: nextPending,
       updatedAt: nowIso,
     };
 
@@ -796,25 +802,24 @@ export class AcornService {
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data() as UserAcornProfile;
-        const remoteOwned = data.purchasedGiftIds || [];
-        if (remoteOwned.includes(gift.id)) {
-          return { success: false, reason: 'already_purchased' };
-        }
         const remoteAcorns = data.acorns || 0;
         if (remoteAcorns < gift.price) {
           return { success: false, reason: 'insufficient_acorns' };
         }
         const serverNextAcorns = Math.max(0, remoteAcorns - gift.price);
-        const serverNextPurchased = [...remoteOwned, gift.id];
+        const serverNextPurchased = Array.from(new Set([...(data.purchasedGiftIds || []), gift.id]));
+        const serverNextPending = [...(data.pendingGiftIds || []), gift.id].slice(-25);
         await updateDoc(docRef, {
           acorns: serverNextAcorns,
           purchasedGiftIds: serverNextPurchased,
+          pendingGiftIds: serverNextPending,
           updatedAt: nowIso,
         });
         this.writeLocalProfile(uid, {
           ...data,
           acorns: serverNextAcorns,
           purchasedGiftIds: serverNextPurchased,
+          pendingGiftIds: serverNextPending,
           updatedAt: nowIso,
         });
       } else {
@@ -826,6 +831,15 @@ export class AcornService {
       handleFirestoreError(error, OperationType.WRITE, `${USERS_PATH}/${uid}`);
       return { success: false };
     }
+  }
+
+  /**
+   * Remove one copy of giftId from pendingGiftIds once placed in Miniroom.
+   */
+  private static consumeOnePendingGift(pending: string[], giftId: string): string[] {
+    const idx = pending.indexOf(giftId);
+    if (idx === -1) return pending;
+    return [...pending.slice(0, idx), ...pending.slice(idx + 1)];
   }
 
   /**
@@ -841,9 +855,11 @@ export class AcornService {
     const local = this.readLocalProfile(uid);
 
     const nextDisplayed = Array.from(new Set([...(local.displayedGiftIds || []), gift.id]));
+    const nextPending = this.consumeOnePendingGift(local.pendingGiftIds || [], gift.id);
     const updatedLocal: UserAcornProfile = {
       ...local,
       displayedGiftIds: nextDisplayed,
+      pendingGiftIds: nextPending,
       eligible: { ...(local.eligible || {}), miniroomGift: true },
       updatedAt: nowIso,
     };
@@ -881,8 +897,10 @@ export class AcornService {
         if (snap.exists()) {
           const data = snap.data() as UserAcornProfile;
           const serverDisplayed = Array.from(new Set([...(data.displayedGiftIds || []), gift.id]));
+          const serverPending = this.consumeOnePendingGift(data.pendingGiftIds || [], gift.id);
           await updateDoc(userRef, {
             displayedGiftIds: serverDisplayed,
+            pendingGiftIds: serverPending,
             'eligible.miniroomGift': true,
             updatedAt: nowIso,
           });
