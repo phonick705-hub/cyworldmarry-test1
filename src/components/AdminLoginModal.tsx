@@ -92,7 +92,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onShowToast })
           </div>
 
           <div className="text-[10px] font-pixel text-[#888888] text-center pt-1 border-t border-dashed border-[#dcd1be]">
-            승인된 관리자: {ADMIN_EMAILS.join(', ')}
+            기본 관리자: {ADMIN_EMAILS[0]} (및 등록된 추가 관리자)
           </div>
         </motion.div>
       </div>

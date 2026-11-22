@@ -21,14 +21,56 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Admin authorization check based on configured verified admin emails
-    function isAdmin() {
+    // Primary root administrators (always authorized)
+    function isPrimaryAdmin() {
       return isSignedIn()
         && request.auth.token.email_verified == true
+        && request.auth.token.email is string
         && (
-          request.auth.token.email == 'phonick705@gmail.com' ||
-          request.auth.token.email == 'admin@wedding.com'
+          request.auth.token.email.lower() == 'phonick705@gmail.com' ||
+          request.auth.token.email.lower() == 'admin@wedding.com'
         );
+    }
+
+    // Admin authorization check: primary root admins OR dynamically added admins in /admins/{email}
+    function isAdmin() {
+      return isPrimaryAdmin()
+        || (
+          isSignedIn()
+          && request.auth.token.email_verified == true
+          && request.auth.token.email is string
+          && exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
+        );
+    }
+
+    // Additional Authorized Admin Email Accounts
+    match /admins/{adminEmail} {
+      allow get: if isAdmin() || (
+        isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == adminEmail
+      );
+      allow list: if isAdmin();
+
+      allow create, update: if isAdmin()
+        && incoming().keys().hasAll(['email', 'addedBy', 'createdAt'])
+        && incoming().keys().hasOnly(['email', 'note', 'addedBy', 'createdAt'])
+        && incoming().email is string
+        && incoming().email.size() >= 5
+        && incoming().email.size() <= 100
+        && incoming().email == adminEmail
+        && incoming().email == incoming().email.lower()
+        && incoming().addedBy is string
+        && incoming().addedBy.size() > 0
+        && incoming().addedBy.size() <= 100
+        && incoming().createdAt is string
+        && incoming().createdAt.size() <= 40
+        && (!('note' in incoming()) || (incoming().note is string && incoming().note.size() <= 50));
+
+      allow delete: if isAdmin()
+        && adminEmail != 'phonick705@gmail.com'
+        && adminEmail != 'admin@wedding.com';
     }
 
     // Users Collection (Acorn Balance & Claimed Rewards per Visitor)

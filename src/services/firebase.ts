@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, 
   doc, 
+  getDoc,
   getDocFromServer 
 } from 'firebase/firestore';
 import { 
@@ -71,10 +72,25 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Check if an email is an authorized administrator
+// Check if an email is a primary hardcoded administrator
 export function isAuthorizedAdmin(email: string | null | undefined): boolean {
   if (!email) return false;
   return ADMIN_EMAILS.map((e) => e.toLowerCase().trim()).includes(email.toLowerCase().trim());
+}
+
+// Check if an email is either a primary admin or registered in Firestore /admins/{email}
+export async function checkIsAuthorizedAdmin(email: string | null | undefined): Promise<boolean> {
+  if (!email) return false;
+  const normalized = email.toLowerCase().trim();
+  if (isAuthorizedAdmin(normalized)) return true;
+
+  try {
+    const snap = await getDoc(doc(db, 'admins', normalized));
+    return snap.exists();
+  } catch (error) {
+    console.warn('Admin check notice:', error);
+    return false;
+  }
 }
 
 // Safely return current Firebase user without attempting restricted anonymous sign-in
@@ -91,8 +107,9 @@ export async function loginWithGoogle(): Promise<User> {
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
     
-    // Check if the signed in user is an authorized admin
-    if (!isAuthorizedAdmin(user.email)) {
+    // Check if the signed in user is an authorized admin (primary or Firestore /admins)
+    const authorized = await checkIsAuthorizedAdmin(user.email);
+    if (!authorized) {
       await firebaseSignOut(auth);
       throw new Error('권한이 없어요. 관리자로 등록된 이메일 계정으로 로그인해주세요.');
     }

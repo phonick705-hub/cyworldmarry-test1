@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Play, Pause, Music, LogOut, ShieldAlert, Check, X } from 'lucide-react';
-import { WEDDING_CONFIG } from '../config/weddingConfig';
+import { Volume2, VolumeX, Play, Pause, Music, LogOut, ShieldAlert, Check, X, UserPlus, Trash2, ShieldCheck } from 'lucide-react';
+import { WEDDING_CONFIG, ADMIN_EMAILS } from '../config/weddingConfig';
 import { bgmPlayer } from '../utils/soundSynthesizer';
 import { useAuth } from '../context/AuthContext';
 import { WeddingDataService } from '../services/weddingDataService';
+import { AdminService, AdminAccountEntry } from '../services/adminService';
 
 interface HeaderProps {
   onShowToast: (msg: string) => void;
@@ -16,6 +17,14 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
   const [isEditingWord, setIsEditingWord] = useState(false);
   const [editInput, setEditInput] = useState<string>(WEDDING_CONFIG.miniroom.todayWord);
   const [isSavingWord, setIsSavingWord] = useState(false);
+
+  // Admin account management state
+  const [showAdminManageModal, setShowAdminManageModal] = useState(false);
+  const [adminAccounts, setAdminAccounts] = useState<AdminAccountEntry[]>([]);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminNote, setNewAdminNote] = useState('');
+  const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   // Subscribe to BGM player state
   useEffect(() => {
@@ -38,6 +47,19 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Subscribe to dynamically added admin accounts when logged in as admin
+  useEffect(() => {
+    if (!isAdmin) {
+      setAdminAccounts([]);
+      setShowAdminManageModal(false);
+      return;
+    }
+    const unsubscribe = AdminService.subscribeAdminAccounts((accounts) => {
+      setAdminAccounts(accounts);
+    });
+    return () => unsubscribe();
+  }, [isAdmin]);
 
   const handleToggleBgm = () => {
     const newState = bgmPlayer.toggle();
@@ -96,19 +118,33 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
     <header className="w-full space-y-2">
       {/* Admin Mode Floating Indicator (Visible ONLY when isAdmin is true) */}
       {isAdmin && (
-        <div className="retro-box bg-[#FFF3BF] border-2 border-[#3B2F2F] px-3 py-1.5 flex items-center justify-between text-xs font-pixel shadow-[2px_2px_0_#3B2F2F] animate-fadeIn">
-          <div className="flex items-center gap-1.5 text-[#D9480F]">
-            <ShieldAlert className="w-4 h-4 text-[#D9480F]" />
-            <span className="font-bold">👑 관리자 모드 활성화됨</span>
-            <span className="text-[10px] text-[#666666] hidden sm:inline">({currentUser?.email})</span>
+        <div className="retro-box bg-[#FFF3BF] border-2 border-[#3B2F2F] px-3 py-1.5 flex flex-wrap items-center justify-between gap-1.5 text-xs font-pixel shadow-[2px_2px_0_#3B2F2F] animate-fadeIn">
+          <div className="flex items-center gap-1.5 text-[#D9480F] min-w-0">
+            <ShieldAlert className="w-4 h-4 text-[#D9480F] shrink-0" />
+            <span className="font-bold truncate">👑 관리자 모드</span>
+            <span className="text-[10px] text-[#666666] hidden sm:inline truncate">({currentUser?.email})</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="retro-btn bg-white hover:bg-[#FFF0F4] text-[#3B2F2F] px-2 py-0.5 text-[10px] flex items-center gap-1 cursor-pointer"
-          >
-            <LogOut className="w-3 h-3 text-[#E03131]" />
-            <span>로그아웃</span>
-          </button>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setAdminError(null);
+                setShowAdminManageModal(true);
+              }}
+              className="retro-btn bg-[#EBF4FF] hover:bg-[#D0EBFF] text-[#1971C2] px-2 py-0.5 text-[10px] flex items-center gap-1 cursor-pointer"
+              title="추가 관리자 계정 등록 및 관리"
+            >
+              <UserPlus className="w-3 h-3" />
+              <span>관리자 추가</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="retro-btn bg-white hover:bg-[#FFF0F4] text-[#3B2F2F] px-2 py-0.5 text-[10px] flex items-center gap-1 cursor-pointer"
+            >
+              <LogOut className="w-3 h-3 text-[#E03131]" />
+              <span>로그아웃</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -226,6 +262,166 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
           </div>
         )}
       </div>
+
+      {/* Admin Accounts Management Modal */}
+      {isAdmin && showAdminManageModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="retro-box bg-white max-w-sm w-full p-4 space-y-3.5 shadow-[6px_6px_0_#2E8BFF]">
+            <div className="flex items-center justify-between border-b-2 border-[#3B2F2F] pb-2">
+              <div className="flex items-center gap-1.5 font-pixel text-sm font-bold text-[#3B2F2F]">
+                <ShieldCheck className="w-4 h-4 text-[#2E8BFF]" />
+                <span>관리자 계정 관리</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdminManageModal(false)}
+                className="text-[#888888] hover:text-[#3B2F2F] p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Current Admins List */}
+            <div className="space-y-2 text-xs">
+              <div className="font-pixel text-[11px] font-bold text-[#3B2F2F]">
+                등록된 관리자 목록
+              </div>
+
+              <div className="max-h-44 overflow-y-auto space-y-1.5 pr-0.5">
+                {/* Primary Root Admin */}
+                <div className="bg-[#FFF9DB] border border-[#FCC419] rounded px-2.5 py-1.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-pixel text-[11px] font-bold text-[#3B2F2F] truncate">
+                      {ADMIN_EMAILS[0]}
+                    </div>
+                    <div className="text-[10px] font-body text-[#856404]">
+                      기본 관리자 (고정 · 변경 불가)
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-pixel bg-[#FFF3BF] text-[#D9480F] border border-[#FFD43B] px-1.5 py-0.5 rounded">
+                    대표
+                  </span>
+                </div>
+
+                {/* Dynamically Added Admins */}
+                {adminAccounts.map((acc) => (
+                  <div
+                    key={acc.email}
+                    className="bg-[#FAF7F0] border border-[#D8CBB8] rounded px-2.5 py-1.5 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-pixel text-[11px] font-bold text-[#3B2F2F] truncate">
+                        {acc.email}
+                      </div>
+                      {acc.note && (
+                        <div className="text-[10px] font-body text-[#666666] truncate">
+                          {acc.note}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await AdminService.removeAdminAccount(acc.email);
+                          bgmPlayer.playChime();
+                          onShowToast(`${acc.email} 관리자 권한을 삭제했습니다.`);
+                        } catch (err: unknown) {
+                          const msg = err instanceof Error ? err.message : '삭제에 실패했습니다.';
+                          onShowToast(msg);
+                        }
+                      }}
+                      className="p-1 text-[#999999] hover:text-[#E03131] hover:bg-[#FFF5F5] rounded cursor-pointer shrink-0"
+                      title="관리자 권한 삭제"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Add New Admin Form */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setAdminError(null);
+                setIsSavingAdmin(true);
+                try {
+                  await AdminService.addAdminAccount(
+                    newAdminEmail,
+                    newAdminNote,
+                    currentUser?.email || ADMIN_EMAILS[0]
+                  );
+                  setNewAdminEmail('');
+                  setNewAdminNote('');
+                  bgmPlayer.playChime();
+                  onShowToast('새 관리자 계정이 등록되었습니다! 👑');
+                } catch (err: unknown) {
+                  const msg =
+                    err instanceof Error && !err.message.startsWith('{')
+                      ? err.message
+                      : '관리자 추가에 실패했습니다. 이메일과 권한을 확인해주세요.';
+                  setAdminError(msg);
+                } finally {
+                  setIsSavingAdmin(false);
+                }
+              }}
+              className="space-y-2 border-t border-dashed border-[#dcd1be] pt-3"
+            >
+              <div className="font-pixel text-[11px] font-bold text-[#3B2F2F]">
+                새 관리자 이메일 추가
+              </div>
+
+              {adminError && (
+                <div className="p-2 rounded bg-[#FFF0F0] border border-[#FF8787] text-[#E03131] text-[11px] font-pixel">
+                  {adminError}
+                </div>
+              )}
+
+              <input
+                type="email"
+                required
+                value={newAdminEmail}
+                onChange={(e) => setNewAdminEmail(e.target.value)}
+                placeholder="추가할 구글 이메일 (예: bride@gmail.com)"
+                maxLength={100}
+                className="w-full text-xs font-pixel px-2.5 py-1.5 border-2 border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
+              />
+              <input
+                type="text"
+                value={newAdminNote}
+                onChange={(e) => setNewAdminNote(e.target.value)}
+                placeholder="메모 (선택, 예: 신부 / 공동 관리자)"
+                maxLength={50}
+                className="w-full text-xs font-body px-2.5 py-1.5 border border-[#D8CBB8] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
+              />
+
+              <p className="text-[10px] font-body text-[#777777] leading-snug">
+                추가된 Google 이메일로 관리자 로그인하면 동일하게 모든 관리 기능을 사용할 수 있습니다. (Firebase Firestore <code className="font-mono">admins</code> 컬렉션과 실시간 연동)
+              </p>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminManageModal(false)}
+                  className="retro-btn flex-1 bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
+                >
+                  닫기
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingAdmin || !newAdminEmail.trim()}
+                  className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>{isSavingAdmin ? '등록 중...' : '관리자 추가하기'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

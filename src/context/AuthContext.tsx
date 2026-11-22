@@ -4,7 +4,8 @@ import {
   auth, 
   loginWithGoogle, 
   logoutAdmin, 
-  isAuthorizedAdmin 
+  isAuthorizedAdmin,
+  checkIsAuthorizedAdmin
 } from '../services/firebase';
 
 interface AuthContextType {
@@ -34,16 +35,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
 
   useEffect(() => {
+    let active = true;
+
     // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!active) return;
+
       if (user) {
         setCurrentUser(user);
-        setIsAdmin(isAuthorizedAdmin(user.email));
+        if (isAuthorizedAdmin(user.email)) {
+          setIsAdmin(true);
+          setIsAuthReady(true);
+        } else {
+          const authorized = await checkIsAuthorizedAdmin(user.email);
+          if (!active) return;
+          setIsAdmin(authorized);
+          setIsAuthReady(true);
+        }
       } else {
         setCurrentUser(null);
         setIsAdmin(false);
+        setIsAuthReady(true);
       }
-      setIsAuthReady(true);
     });
 
     // Check for secret admin entry via URL (/admin or #admin)
