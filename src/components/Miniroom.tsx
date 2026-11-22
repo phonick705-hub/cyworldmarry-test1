@@ -4,7 +4,7 @@ import { bgmPlayer } from '../utils/soundSynthesizer';
 import { AcornService, DisplayedMiniroomGift } from '../services/acornService';
 import { MINIROOM_GIFT_PRODUCTS, MiniroomGiftProduct } from '../config/weddingConfig';
 import { useAuth } from '../context/AuthContext';
-import miniroomCleanBg from '../assets/images/miniroom_clean_bg_1795243086132.jpg';
+import miniroomCleanBg from '../assets/images/miniroom_clean_full.jpg';
 
 interface MiniroomProps {
   guestbookCount: number;
@@ -478,7 +478,7 @@ export const Miniroom: React.FC<MiniroomProps> = ({
       <div
         ref={roomRef}
         onClick={handleRoomClick}
-        className={`retro-box overflow-hidden relative select-none group aspect-[4/3] bg-[#f9f5ed] ${
+        className={`retro-box w-full overflow-hidden relative select-none group aspect-[4/3] bg-[#f9f5ed] ${
           isEditingPositions ? 'cursor-default ring-2 ring-[#2E8BFF]' : 'cursor-pointer'
         }`}
         title={
@@ -488,12 +488,12 @@ export const Miniroom: React.FC<MiniroomProps> = ({
         }
       >
         {/* Pixel Art Miniroom Artwork */}
-        <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+        <div className="absolute inset-0 overflow-hidden">
           <img
             src={miniroomCleanBg}
             alt="재현과 하은의 싸이월드 웨딩 미니룸"
             draggable={false}
-            className="w-full h-full object-cover select-none pointer-events-none"
+            className="block w-full h-full object-cover object-center select-none pointer-events-none"
             style={{ imageRendering: 'pixelated' }}
             loading="eager"
           />
