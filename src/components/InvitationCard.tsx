@@ -42,13 +42,57 @@ interface InvitationCardProps {
   onShowToast: (msg: string) => void;
 }
 
-const buildMapUrls = (address: string, venueName?: string) => {
-  const queryText = (address || venueName || '').trim();
-  const encoded = encodeURIComponent(queryText);
+const DEFAULT_MAP_DESTINATION = '웨딩그룹위더스 영등포';
+const WITHUS_YEONGDEUNGPO_COORDS = {
+  latitude: 37.5213713,
+  longitude: 126.9044943,
+};
+
+const resolveMapDestination = (
+  venueName?: string,
+  address?: string,
+  latitude?: number,
+  longitude?: number
+) => {
+  const cleanVenue = (venueName || '').trim();
+  const cleanAddress = (address || '').trim();
+  const destinationName = cleanVenue || cleanAddress || DEFAULT_MAP_DESTINATION;
+  const isWithusYeongdeungpo =
+    destinationName.includes('위더스') || cleanAddress.includes('영중로 55');
+
   return {
-    naver: `https://m.map.naver.com/search2/search.naver?query=${encoded}`,
-    kakao: `https://map.kakao.com/link/search/${encoded}`,
-    tmap: `https://tmap.life/nav/search?query=${encoded}`,
+    destinationName,
+    latitude: isWithusYeongdeungpo
+      ? WITHUS_YEONGDEUNGPO_COORDS.latitude
+      : latitude ?? WITHUS_YEONGDEUNGPO_COORDS.latitude,
+    longitude: isWithusYeongdeungpo
+      ? WITHUS_YEONGDEUNGPO_COORDS.longitude
+      : longitude ?? WITHUS_YEONGDEUNGPO_COORDS.longitude,
+  };
+};
+
+const buildMapUrls = (
+  address: string,
+  venueName?: string,
+  latitude?: number,
+  longitude?: number
+) => {
+  const resolved = resolveMapDestination(venueName, address, latitude, longitude);
+  const encodedName = encodeURIComponent(resolved.destinationName);
+  const appOrigin = encodeURIComponent(
+    typeof window !== 'undefined' ? window.location.origin : 'https://cyworldmarry.web.app'
+  );
+
+  return {
+    destinationName: resolved.destinationName,
+    latitude: resolved.latitude,
+    longitude: resolved.longitude,
+    naver: `https://map.naver.com/v5/directions/-/${resolved.longitude},${resolved.latitude},${encodedName}/-/car`,
+    naverMobileWeb: `https://m.map.naver.com/route.nhn?menu=route&ename=${encodedName}&ex=${resolved.longitude}&ey=${resolved.latitude}&pathType=0&showMap=true`,
+    naverApp: `nmap://route/car?dlat=${resolved.latitude}&dlng=${resolved.longitude}&dname=${encodedName}&appname=${appOrigin}`,
+    kakao: `https://map.kakao.com/link/to/${encodedName},${resolved.latitude},${resolved.longitude}`,
+    tmap: `https://tmap.life/nav/search?query=${encodedName}`,
+    tmapApp: `tmap://route?goalname=${encodedName}&goalx=${resolved.longitude}&goaly=${resolved.latitude}`,
   };
 };
 
@@ -301,12 +345,26 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
             : WEDDING_CONFIG.bride.motherAccount,
         };
 
+        const rawCeremony = remoteConfig.ceremony || {};
+        const resolvedDest = resolveMapDestination(
+          rawCeremony.venueName || WEDDING_CONFIG.ceremony.venueName,
+          rawCeremony.address || WEDDING_CONFIG.ceremony.address,
+          rawCeremony.latitude,
+          rawCeremony.longitude
+        );
+        const normalizedCeremony = {
+          ...WEDDING_CONFIG.ceremony,
+          ...rawCeremony,
+          latitude: resolvedDest.latitude,
+          longitude: resolvedDest.longitude,
+        };
+
         setConfig((prev) => ({
           ...prev,
           ...remoteConfig,
           groom: { ...prev.groom, ...normalizedGroom },
           bride: { ...prev.bride, ...normalizedBride },
-          ceremony: { ...prev.ceremony, ...remoteConfig.ceremony },
+          ceremony: { ...prev.ceremony, ...normalizedCeremony },
           invitation: { ...prev.invitation, ...remoteConfig.invitation },
         }));
 
@@ -513,7 +571,12 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
     try {
       const trimmedAddress = editAddress.trim();
       const trimmedVenue = editVenue.trim();
-      const updatedMapUrls = buildMapUrls(trimmedAddress, trimmedVenue);
+      const updatedMapInfo = buildMapUrls(
+        trimmedAddress,
+        trimmedVenue,
+        config.ceremony.latitude,
+        config.ceremony.longitude
+      );
       const finalDateParts = parseDateFromText(editDate) || resolveCeremonyDateParts(config.ceremony.date, editDateDisplay);
       const timeSuffixMatch = (config.ceremony.date || '').match(/T(\d{2}:\d{2}:\d{2})/);
       const timePart = timeSuffixMatch ? timeSuffixMatch[1] : '12:30:00';
@@ -529,7 +592,13 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
         detailAddress: editDetailAddress.trim(),
         subwayGuide: editSubwayGuide.trim(),
         parkingGuide: editParkingGuide.trim(),
-        mapUrls: updatedMapUrls,
+        latitude: updatedMapInfo.latitude,
+        longitude: updatedMapInfo.longitude,
+        mapUrls: {
+          naver: updatedMapInfo.naver,
+          kakao: updatedMapInfo.kakao,
+          tmap: updatedMapInfo.tmap,
+        },
       };
 
       const updatedInvitation = {
@@ -776,7 +845,43 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
     '새마을금고', '신협', '수협', 'iM뱅크(대구)', '부산은행', '경남은행', '광주은행'
   ];
 
-  const dynamicMapUrls = buildMapUrls(config.ceremony.address, config.ceremony.venueName);
+  const dynamicMapUrls = buildMapUrls(
+    config.ceremony.address,
+    config.ceremony.venueName,
+    config.ceremony.latitude,
+    config.ceremony.longitude
+  );
+
+  const handleOpenMapApp = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    appSchemeUrl: string,
+    fallbackWebUrl: string
+  ) => {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobile) {
+      return;
+    }
+
+    e.preventDefault();
+    const start = Date.now();
+    let appLaunched = false;
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        appLaunched = true;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange, { once: true });
+
+    window.location.href = appSchemeUrl;
+
+    window.setTimeout(() => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (!appLaunched && !document.hidden && Date.now() - start < 2500) {
+        window.location.href = fallbackWebUrl;
+      }
+    }, 1400);
+  };
 
   return (
     <div className="w-full space-y-3.5">
@@ -929,6 +1034,9 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
               href={dynamicMapUrls.naver}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) =>
+                handleOpenMapApp(e, dynamicMapUrls.naverApp, dynamicMapUrls.naverMobileWeb)
+              }
               className="retro-btn bg-[#03C75A] text-white py-2 px-1 text-center flex items-center justify-center gap-1 hover:brightness-105"
             >
               <span>네이버 지도</span>
@@ -945,6 +1053,9 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
               href={dynamicMapUrls.tmap}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) =>
+                handleOpenMapApp(e, dynamicMapUrls.tmapApp, dynamicMapUrls.tmap)
+              }
               className="retro-btn bg-[#2F3438] text-white py-2 px-1 text-center flex items-center justify-center gap-1 hover:brightness-110"
             >
               <span>티맵 안내</span>
