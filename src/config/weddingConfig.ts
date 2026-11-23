@@ -54,9 +54,9 @@ export const WEDDING_CONFIG = {
   groom: {
     name: '김재현',
     phone: '010-1234-5678',
-    fatherName: '김정호',
+    fatherName: '김동준',
     fatherPhone: '010-3333-5678',
-    motherName: '박선미',
+    motherName: '이정미',
     motherPhone: '010-4444-5678',
     account: {
       bank: '국민은행',
@@ -66,20 +66,20 @@ export const WEDDING_CONFIG = {
     fatherAccount: {
       bank: '신한은행',
       accountNumber: '110-234-567890',
-      holder: '김정호',
+      holder: '김동준',
     },
     motherAccount: {
       bank: '농협은행',
       accountNumber: '302-1234-5678-91',
-      holder: '박선미',
+      holder: '이정미',
     },
   },
   bride: {
     name: '정하은',
     phone: '010-9876-5432',
-    fatherName: '정진우',
+    fatherName: '정원기',
     fatherPhone: '010-5555-9876',
-    motherName: '최은경',
+    motherName: '김인숙',
     motherPhone: '010-6666-9876',
     account: {
       bank: '카카오뱅크',
@@ -89,12 +89,12 @@ export const WEDDING_CONFIG = {
     fatherAccount: {
       bank: '우리은행',
       accountNumber: '1002-345-678901',
-      holder: '정진우',
+      holder: '정원기',
     },
     motherAccount: {
       bank: '하나은행',
       accountNumber: '284-910234-56707',
-      holder: '최은경',
+      holder: '김인숙',
     },
   },
 

@@ -11,6 +11,7 @@ import {
 interface AuthContextType {
   currentUser: User | null;
   isAdmin: boolean;
+  isPrimaryAdmin: boolean;
   isAuthReady: boolean;
   showAdminModal: boolean;
   setShowAdminModal: (show: boolean) => void;
@@ -21,6 +22,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   isAdmin: false,
+  isPrimaryAdmin: false,
   isAuthReady: false,
   showAdminModal: false,
   setShowAdminModal: () => {},
@@ -31,6 +33,7 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isPrimaryAdmin, setIsPrimaryAdmin] = useState<boolean>(false);
   const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
   const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
 
@@ -44,9 +47,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         setCurrentUser(user);
         if (isAuthorizedAdmin(user.email)) {
+          setIsPrimaryAdmin(true);
           setIsAdmin(true);
           setIsAuthReady(true);
         } else {
+          setIsPrimaryAdmin(false);
           const authorized = await checkIsAuthorizedAdmin(user.email);
           if (!active) return;
           setIsAdmin(authorized);
@@ -54,6 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         setCurrentUser(null);
+        setIsPrimaryAdmin(false);
         setIsAdmin(false);
         setIsAuthReady(true);
       }
@@ -80,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginAsAdmin = async () => {
     const user = await loginWithGoogle();
     setCurrentUser(user);
+    setIsPrimaryAdmin(isAuthorizedAdmin(user.email));
     setIsAdmin(true);
     setShowAdminModal(false);
   };
@@ -87,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     await logoutAdmin();
     setCurrentUser(null);
+    setIsPrimaryAdmin(false);
     setIsAdmin(false);
   };
 
@@ -95,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         currentUser,
         isAdmin,
+        isPrimaryAdmin,
         isAuthReady,
         showAdminModal,
         setShowAdminModal,

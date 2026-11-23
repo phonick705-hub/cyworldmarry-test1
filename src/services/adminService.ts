@@ -5,7 +5,7 @@ import {
   deleteDoc,
   onSnapshot,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { ADMIN_EMAILS } from '../config/weddingConfig';
 
 export interface AdminAccountEntry {
@@ -55,6 +55,10 @@ export class AdminService {
     note: string,
     addedByEmail: string
   ): Promise<void> {
+    if (!this.isPrimaryAdminEmail(auth.currentUser?.email)) {
+      throw new Error('새 관리자 추가 권한은 기본 관리자만 가능합니다.');
+    }
+
     const email = rawEmail.toLowerCase().trim();
     if (!EMAIL_REGEX.test(email) || email.length < 5 || email.length > 100) {
       throw new Error('올바른 구글 이메일 주소를 입력해주세요.');
@@ -77,6 +81,10 @@ export class AdminService {
   }
 
   public static async removeAdminAccount(email: string): Promise<void> {
+    if (!this.isPrimaryAdminEmail(auth.currentUser?.email)) {
+      throw new Error('관리자 삭제 권한은 기본 관리자만 가능합니다.');
+    }
+
     const normalized = email.toLowerCase().trim();
     if (this.isPrimaryAdminEmail(normalized)) {
       throw new Error('기본 관리자 계정은 삭제할 수 없습니다.');

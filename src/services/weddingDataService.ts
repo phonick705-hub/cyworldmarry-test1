@@ -26,6 +26,19 @@ import {
   INITIAL_QUIZ_QUESTIONS
 } from '../config/weddingConfig';
 
+export type AttendanceStatus = 'attending' | 'not_attending';
+export type RsvpSide = 'groom' | 'bride';
+
+export interface FirestoreRsvpItem {
+  id: string;
+  name: string;
+  side: RsvpSide;
+  phone: string;
+  attendance: AttendanceStatus;
+  guestCount: number;
+  createdAt: string;
+}
+
 export interface FirestoreGuestbookItem {
   id: string;
   author: string;
@@ -53,6 +66,7 @@ const DIARY_PATH = 'diary';
 const PHOTOS_PATH = 'photos';
 const FOLDERS_PATH = 'photoFolders';
 const QUIZ_PATH = 'quizQuestions';
+const RSVPS_PATH = 'rsvps';
 
 const RATE_LIMIT_KEY = 'cyworld_ilchon_last_request_time';
 const RATE_LIMIT_SECONDS = 30;
@@ -630,6 +644,63 @@ export class WeddingDataService {
     const path = `${QUIZ_PATH}/${id}`;
     try {
       await deleteDoc(doc(db, QUIZ_PATH, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  }
+
+  // ==================== RSVP ATTENDANCE METHODS ====================
+  public static async submitRsvp(data: {
+    name: string;
+    side: RsvpSide;
+    phone: string;
+    attendance: AttendanceStatus;
+    guestCount: number;
+  }): Promise<string> {
+    const cleanName = data.name.trim().slice(0, 30);
+    const cleanPhone = data.phone.trim().slice(0, 20);
+    const cleanGuestCount =
+      data.attendance === 'attending'
+        ? Math.max(1, Math.min(20, Math.floor(Number(data.guestCount) || 1)))
+        : 0;
+    const createdAt = new Date().toISOString().slice(0, 40);
+
+    try {
+      const docRef = await addDoc(collection(db, RSVPS_PATH), {
+        name: cleanName,
+        side: data.side,
+        phone: cleanPhone,
+        attendance: data.attendance,
+        guestCount: cleanGuestCount,
+        createdAt,
+      });
+      return docRef.id;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, RSVPS_PATH);
+    }
+  }
+
+  public static subscribeRsvps(onData: (items: FirestoreRsvpItem[]) => void): () => void {
+    return onSnapshot(
+      collection(db, RSVPS_PATH),
+      (snapshot) => {
+        const list: FirestoreRsvpItem[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<FirestoreRsvpItem, 'id'>),
+        }));
+        list.sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'));
+        onData(list);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, RSVPS_PATH);
+      }
+    );
+  }
+
+  public static async deleteRsvp(id: string): Promise<void> {
+    const path = `${RSVPS_PATH}/${id}`;
+    try {
+      await deleteDoc(doc(db, RSVPS_PATH, id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }

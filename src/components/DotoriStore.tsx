@@ -146,7 +146,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
       }
     } catch (err) {
       console.error('Gift display failed:', err);
-      onShowToast('미니룸 진열에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      onShowToast('서버 반영에 실패했어요. 네트워크 확인 후 다시 "미니룸에 진열하기"를 눌러주세요.');
     } finally {
       setIsProcessingGift(false);
     }

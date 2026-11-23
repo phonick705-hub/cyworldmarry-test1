@@ -14,7 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { 
   WeddingDataService, 
-  FirestoreGuestbookItem 
+  FirestoreGuestbookItem
 } from '../services/weddingDataService';
 import { WEDDING_CONFIG } from '../config/weddingConfig';
 import { bgmPlayer } from '../utils/soundSynthesizer';

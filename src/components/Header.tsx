@@ -11,7 +11,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
-  const { isAdmin, currentUser, logout } = useAuth();
+  const { isAdmin, isPrimaryAdmin, currentUser, logout } = useAuth();
   const [isPlaying, setIsPlaying] = useState(false);
   const [todayWord, setTodayWord] = useState<string>(WEDDING_CONFIG.miniroom.todayWord);
   const [isEditingWord, setIsEditingWord] = useState(false);
@@ -132,10 +132,19 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
                 setShowAdminManageModal(true);
               }}
               className="retro-btn bg-[#EBF4FF] hover:bg-[#D0EBFF] text-[#1971C2] px-2 py-0.5 text-[10px] flex items-center gap-1 cursor-pointer"
-              title="추가 관리자 계정 등록 및 관리"
+              title={isPrimaryAdmin ? '추가 관리자 계정 등록 및 관리' : '등록된 관리자 계정 확인'}
             >
-              <UserPlus className="w-3 h-3" />
-              <span>관리자 추가</span>
+              {isPrimaryAdmin ? (
+                <>
+                  <UserPlus className="w-3 h-3" />
+                  <span>관리자 추가</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>관리자 목록</span>
+                </>
+              )}
             </button>
             <button
               onClick={handleLogout}
@@ -319,106 +328,123 @@ export const Header: React.FC<HeaderProps> = ({ onShowToast }) => {
                         </div>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await AdminService.removeAdminAccount(acc.email);
-                          bgmPlayer.playChime();
-                          onShowToast(`${acc.email} 관리자 권한을 삭제했습니다.`);
-                        } catch (err: unknown) {
-                          const msg = err instanceof Error ? err.message : '삭제에 실패했습니다.';
-                          onShowToast(msg);
-                        }
-                      }}
-                      className="p-1 text-[#999999] hover:text-[#E03131] hover:bg-[#FFF5F5] rounded cursor-pointer shrink-0"
-                      title="관리자 권한 삭제"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {isPrimaryAdmin && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await AdminService.removeAdminAccount(acc.email);
+                            bgmPlayer.playChime();
+                            onShowToast(`${acc.email} 관리자 권한을 삭제했습니다.`);
+                          } catch (err: unknown) {
+                            const msg = err instanceof Error ? err.message : '삭제에 실패했습니다.';
+                            onShowToast(msg);
+                          }
+                        }}
+                        className="p-1 text-[#999999] hover:text-[#E03131] hover:bg-[#FFF5F5] rounded cursor-pointer shrink-0"
+                        title="관리자 권한 삭제"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Add New Admin Form */}
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setAdminError(null);
-                setIsSavingAdmin(true);
-                try {
-                  await AdminService.addAdminAccount(
-                    newAdminEmail,
-                    newAdminNote,
-                    currentUser?.email || ADMIN_EMAILS[0]
-                  );
-                  setNewAdminEmail('');
-                  setNewAdminNote('');
-                  bgmPlayer.playChime();
-                  onShowToast('새 관리자 계정이 등록되었습니다! 👑');
-                } catch (err: unknown) {
-                  const msg =
-                    err instanceof Error && !err.message.startsWith('{')
-                      ? err.message
-                      : '관리자 추가에 실패했습니다. 이메일과 권한을 확인해주세요.';
-                  setAdminError(msg);
-                } finally {
-                  setIsSavingAdmin(false);
-                }
-              }}
-              className="space-y-2 border-t border-dashed border-[#dcd1be] pt-3"
-            >
-              <div className="font-pixel text-[11px] font-bold text-[#3B2F2F]">
-                새 관리자 이메일 추가
-              </div>
-
-              {adminError && (
-                <div className="p-2 rounded bg-[#FFF0F0] border border-[#FF8787] text-[#E03131] text-[11px] font-pixel">
-                  {adminError}
+            {/* Add New Admin Form (Primary Admin ONLY) */}
+            {isPrimaryAdmin ? (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setAdminError(null);
+                  setIsSavingAdmin(true);
+                  try {
+                    await AdminService.addAdminAccount(
+                      newAdminEmail,
+                      newAdminNote,
+                      currentUser?.email || ADMIN_EMAILS[0]
+                    );
+                    setNewAdminEmail('');
+                    setNewAdminNote('');
+                    bgmPlayer.playChime();
+                    onShowToast('새 관리자 계정이 등록되었습니다! 👑');
+                  } catch (err: unknown) {
+                    const msg =
+                      err instanceof Error && !err.message.startsWith('{')
+                        ? err.message
+                        : '관리자 추가에 실패했습니다. 이메일과 권한을 확인해주세요.';
+                    setAdminError(msg);
+                  } finally {
+                    setIsSavingAdmin(false);
+                  }
+                }}
+                className="space-y-2 border-t border-dashed border-[#dcd1be] pt-3"
+              >
+                <div className="font-pixel text-[11px] font-bold text-[#3B2F2F]">
+                  새 관리자 이메일 추가
                 </div>
-              )}
 
-              <input
-                type="email"
-                required
-                value={newAdminEmail}
-                onChange={(e) => setNewAdminEmail(e.target.value)}
-                placeholder="추가할 구글 이메일 (예: bride@gmail.com)"
-                maxLength={100}
-                className="w-full text-xs font-pixel px-2.5 py-1.5 border-2 border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
-              />
-              <input
-                type="text"
-                value={newAdminNote}
-                onChange={(e) => setNewAdminNote(e.target.value)}
-                placeholder="메모 (선택, 예: 신부 / 공동 관리자)"
-                maxLength={50}
-                className="w-full text-xs font-body px-2.5 py-1.5 border border-[#D8CBB8] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
-              />
+                {adminError && (
+                  <div className="p-2 rounded bg-[#FFF0F0] border border-[#FF8787] text-[#E03131] text-[11px] font-pixel">
+                    {adminError}
+                  </div>
+                )}
 
-              <p className="text-[10px] font-body text-[#777777] leading-snug">
-                추가된 Google 이메일로 관리자 로그인하면 동일하게 모든 관리 기능을 사용할 수 있습니다. (Firebase Firestore <code className="font-mono">admins</code> 컬렉션과 실시간 연동)
-              </p>
+                <input
+                  type="email"
+                  required
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="추가할 구글 이메일 (예: bride@gmail.com)"
+                  maxLength={100}
+                  className="w-full text-xs font-pixel px-2.5 py-1.5 border-2 border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
+                />
+                <input
+                  type="text"
+                  value={newAdminNote}
+                  onChange={(e) => setNewAdminNote(e.target.value)}
+                  placeholder="메모 (선택, 예: 신부 / 공동 관리자)"
+                  maxLength={50}
+                  className="w-full text-xs font-body px-2.5 py-1.5 border border-[#D8CBB8] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF]"
+                />
 
-              <div className="flex gap-2 pt-1">
+                <p className="text-[10px] font-body text-[#777777] leading-snug">
+                  추가된 Google 이메일로 관리자 로그인하면 동일하게 모든 관리 기능을 사용할 수 있습니다. (Firebase Firestore <code className="font-mono">admins</code> 컬렉션과 실시간 연동)
+                </p>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminManageModal(false)}
+                    className="retro-btn flex-1 bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
+                  >
+                    닫기
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingAdmin || !newAdminEmail.trim()}
+                    className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>{isSavingAdmin ? '등록 중...' : '관리자 추가하기'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-2.5 border-t border-dashed border-[#dcd1be] pt-3">
+                <div className="p-2.5 rounded bg-[#FAF7F0] border border-[#D8CBB8] text-[11px] font-body text-[#555555] leading-relaxed">
+                  새 관리자 이메일 추가 및 삭제 권한은 <strong className="text-[#3B2F2F]">기본 관리자({ADMIN_EMAILS[0]})</strong>만 사용할 수 있습니다.
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowAdminManageModal(false)}
-                  className="retro-btn flex-1 bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
+                  className="retro-btn w-full bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] py-2 text-xs font-pixel cursor-pointer"
                 >
                   닫기
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSavingAdmin || !newAdminEmail.trim()}
-                  className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>{isSavingAdmin ? '등록 중...' : '관리자 추가하기'}</span>
-                </button>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}

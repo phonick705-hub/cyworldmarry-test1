@@ -21,6 +21,31 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidRsvp(data) {
+      return data.keys().hasAll(['name', 'side', 'phone', 'attendance', 'guestCount', 'createdAt'])
+        && data.keys().hasOnly(['name', 'side', 'phone', 'attendance', 'guestCount', 'createdAt'])
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 30
+        && data.side in ['groom', 'bride']
+        && data.phone is string
+        && data.phone.size() >= 7
+        && data.phone.size() <= 20
+        && data.attendance in ['attending', 'not_attending']
+        && data.guestCount is int
+        && (
+          (data.attendance == 'attending' && data.guestCount >= 1 && data.guestCount <= 20)
+          || (data.attendance == 'not_attending' && data.guestCount == 0)
+        )
+        && data.createdAt is string
+        && data.createdAt.size() > 0
+        && data.createdAt.size() <= 40;
+    }
+
     // Primary root administrators (always authorized)
     function isPrimaryAdmin() {
       return isSignedIn()
@@ -53,7 +78,7 @@ service cloud.firestore {
       );
       allow list: if isAdmin();
 
-      allow create, update: if isAdmin()
+      allow create, update: if isPrimaryAdmin()
         && incoming().keys().hasAll(['email', 'addedBy', 'createdAt'])
         && incoming().keys().hasOnly(['email', 'note', 'addedBy', 'createdAt'])
         && incoming().email is string
@@ -68,7 +93,7 @@ service cloud.firestore {
         && incoming().createdAt.size() <= 40
         && (!('note' in incoming()) || (incoming().note is string && incoming().note.size() <= 50));
 
-      allow delete: if isAdmin()
+      allow delete: if isPrimaryAdmin()
         && adminEmail != 'phonick705@gmail.com'
         && adminEmail != 'admin@wedding.com';
     }
@@ -144,7 +169,7 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         && incoming().keys().hasAll(['giftId', 'name', 'emoji', 'senderName', 'createdAt'])
-        && incoming().keys().hasOnly(['giftId', 'name', 'emoji', 'senderName', 'senderUid', 'createdAt', 'posX', 'posY', 'updatedAt'])
+        && incoming().keys().hasOnly(['giftId', 'name', 'emoji', 'senderName', 'senderUid', 'createdAt', 'posX', 'posY', 'updatedAt', 'hidden'])
         && incoming().giftId is string
         && incoming().giftId.size() > 0
         && incoming().giftId.size() <= 50
@@ -162,6 +187,7 @@ service cloud.firestore {
         && incoming().createdAt.size() <= 40
         && (!('posX' in incoming()) || (incoming().posX is number && incoming().posX >= 0 && incoming().posX <= 100))
         && (!('posY' in incoming()) || (incoming().posY is number && incoming().posY >= 0 && incoming().posY <= 100))
+        && (!('hidden' in incoming()) || incoming().hidden is bool)
         && (!('updatedAt' in incoming()) || (incoming().updatedAt is string && incoming().updatedAt.size() <= 40));
 
       allow delete: if isAdmin();
@@ -232,7 +258,7 @@ service cloud.firestore {
 
       // Visitors and admins can create entries matching validated schema and length limits
       allow create: if incoming().keys().hasAll(['author', 'emoji', 'message', 'authorUid', 'createdAt'])
-        && incoming().keys().hasOnly(['author', 'authorName', 'ilchonName', 'emoji', 'message', 'authorUid', 'createdAt', 'edited'])
+        && incoming().keys().hasOnly(['author', 'authorName', 'ilchonName', 'emoji', 'message', 'attendance', 'authorUid', 'createdAt', 'edited'])
         && incoming().author is string
         && incoming().author.size() > 0
         && incoming().author.size() <= 60
@@ -244,6 +270,7 @@ service cloud.firestore {
         && incoming().message is string
         && incoming().message.size() > 0
         && incoming().message.size() <= 200
+        && (!('attendance' in incoming()) || (incoming().attendance in ['attending', 'not_attending']))
         && incoming().authorUid is string
         && incoming().authorUid.size() > 0
         && incoming().authorUid.size() <= 128
@@ -251,7 +278,7 @@ service cloud.firestore {
         && incoming().createdAt.size() <= 40
         && (!('edited' in incoming()) || incoming().edited == false);
 
-      // Author can update message, emoji, authorName, updatedAt, edited (authorUid and createdAt cannot change)
+      // Author can update message, emoji, authorName, attendance, updatedAt, edited (authorUid and createdAt cannot change)
       // Admins can also update
       allow update: if (
         isSignedIn()
@@ -261,6 +288,7 @@ service cloud.firestore {
         && incoming().message is string
         && incoming().message.size() > 0
         && incoming().message.size() <= 200
+        && (!('attendance' in incoming()) || (incoming().attendance in ['attending', 'not_attending']))
       ) || isAdmin();
 
       // Author or Admin can delete
@@ -280,7 +308,8 @@ service cloud.firestore {
         && incoming().name.size() > 0
         && incoming().name.size() <= 50
         && incoming().message is string
-        && incoming().message.size() <= 200;
+        && incoming().message.size() <= 200
+        && (!('attendance' in incoming()) || (incoming().attendance in ['attending', 'not_attending']));
 
       // Only admins can approve, edit, or delete ilchons
       allow update: if isAdmin();
@@ -309,6 +338,14 @@ service cloud.firestore {
     match /photoFolders/{folderId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Wedding RSVP Submissions (PII isolated: Admin-only read/list, guest create)
+    match /rsvps/{rsvpId} {
+      allow read: if isAdmin();
+      allow create: if isValidId(rsvpId) && isValidRsvp(incoming());
+      allow update: if isAdmin() && isValidId(rsvpId) && isValidRsvp(incoming());
+      allow delete: if isAdmin() && isValidId(rsvpId);
     }
   }
 }

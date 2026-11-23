@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, 
   MapPin, 
@@ -21,7 +21,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { WEDDING_CONFIG } from '../config/weddingConfig';
-import { WeddingDataService } from '../services/weddingDataService';
+import {
+  WeddingDataService,
+  FirestoreRsvpItem,
+  RsvpSide,
+  AttendanceStatus,
+} from '../services/weddingDataService';
 import { bgmPlayer } from '../utils/soundSynthesizer';
 
 export interface BankAccountItem {
@@ -216,29 +221,239 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
   const [secretTaps, setSecretTaps] = useState(0);
   const [lastTapTime, setLastTapTime] = useState(0);
 
+  // Wedding RSVP Form & Admin Roster States
+  const [rsvpName, setRsvpName] = useState('');
+  const [rsvpSide, setRsvpSide] = useState<RsvpSide | ''>('');
+  const [rsvpPhone, setRsvpPhone] = useState('');
+  const [rsvpAttendance, setRsvpAttendance] = useState<AttendanceStatus | ''>('');
+  const [rsvpGuestCount, setRsvpGuestCount] = useState<number>(1);
+  const [isSubmittingRsvp, setIsSubmittingRsvp] = useState(false);
+  const [rsvpSubmitted, setRsvpSubmitted] = useState(false);
+
+  const [rsvpList, setRsvpList] = useState<FirestoreRsvpItem[]>([]);
+  const [showAdminRsvpPanel, setShowAdminRsvpPanel] = useState(true);
+  const [rsvpToDelete, setRsvpToDelete] = useState<FirestoreRsvpItem | null>(null);
+
+  const hasMigratedLegacyParentsRef = React.useRef(false);
+
   useEffect(() => {
+    const legacyParentMap: Record<string, string> = {
+      김정호: WEDDING_CONFIG.groom.fatherName,
+      박선미: WEDDING_CONFIG.groom.motherName,
+      정진우: WEDDING_CONFIG.bride.fatherName,
+      최은경: WEDDING_CONFIG.bride.motherName,
+    };
+
+    const replaceLegacyName = (value?: string) =>
+      value && legacyParentMap[value] ? legacyParentMap[value] : value;
+
     // Subscribe to invitation configuration in Firestore
     const unsubscribe = WeddingDataService.subscribeInvitationConfig((remoteConfig) => {
       if (remoteConfig) {
+        const rawGroom = remoteConfig.groom || {};
+        const rawBride = remoteConfig.bride || {};
+
+        const hadLegacyNames =
+          rawGroom.fatherName === '김정호' ||
+          rawGroom.motherName === '박선미' ||
+          rawGroom.fatherAccount?.holder === '김정호' ||
+          rawGroom.motherAccount?.holder === '박선미' ||
+          rawBride.fatherName === '정진우' ||
+          rawBride.motherName === '최은경' ||
+          rawBride.fatherAccount?.holder === '정진우' ||
+          rawBride.motherAccount?.holder === '최은경';
+
+        const normalizedGroom = {
+          ...WEDDING_CONFIG.groom,
+          ...rawGroom,
+          fatherName: replaceLegacyName(rawGroom.fatherName) || WEDDING_CONFIG.groom.fatherName,
+          motherName: replaceLegacyName(rawGroom.motherName) || WEDDING_CONFIG.groom.motherName,
+          fatherAccount: rawGroom.fatherAccount
+            ? {
+                ...rawGroom.fatherAccount,
+                holder: replaceLegacyName(rawGroom.fatherAccount.holder),
+              }
+            : WEDDING_CONFIG.groom.fatherAccount,
+          motherAccount: rawGroom.motherAccount
+            ? {
+                ...rawGroom.motherAccount,
+                holder: replaceLegacyName(rawGroom.motherAccount.holder),
+              }
+            : WEDDING_CONFIG.groom.motherAccount,
+        };
+
+        const normalizedBride = {
+          ...WEDDING_CONFIG.bride,
+          ...rawBride,
+          fatherName: replaceLegacyName(rawBride.fatherName) || WEDDING_CONFIG.bride.fatherName,
+          motherName: replaceLegacyName(rawBride.motherName) || WEDDING_CONFIG.bride.motherName,
+          fatherAccount: rawBride.fatherAccount
+            ? {
+                ...rawBride.fatherAccount,
+                holder: replaceLegacyName(rawBride.fatherAccount.holder),
+              }
+            : WEDDING_CONFIG.bride.fatherAccount,
+          motherAccount: rawBride.motherAccount
+            ? {
+                ...rawBride.motherAccount,
+                holder: replaceLegacyName(rawBride.motherAccount.holder),
+              }
+            : WEDDING_CONFIG.bride.motherAccount,
+        };
+
         setConfig((prev) => ({
           ...prev,
           ...remoteConfig,
-          groom: { ...prev.groom, ...remoteConfig.groom },
-          bride: { ...prev.bride, ...remoteConfig.bride },
+          groom: { ...prev.groom, ...normalizedGroom },
+          bride: { ...prev.bride, ...normalizedBride },
           ceremony: { ...prev.ceremony, ...remoteConfig.ceremony },
           invitation: { ...prev.invitation, ...remoteConfig.invitation },
         }));
 
+        let normalizedGroomAccounts: BankAccountItem[] | undefined;
+        let normalizedBrideAccounts: BankAccountItem[] | undefined;
+
         if (remoteConfig.groomAccounts && Array.isArray(remoteConfig.groomAccounts)) {
-          setGroomAccounts(remoteConfig.groomAccounts);
+          const nextGroomAccounts: BankAccountItem[] = remoteConfig.groomAccounts.map((acc: BankAccountItem) => ({
+            ...acc,
+            holder: replaceLegacyName(acc.holder) || acc.holder,
+          }));
+          normalizedGroomAccounts = nextGroomAccounts;
+          setGroomAccounts(nextGroomAccounts);
         }
         if (remoteConfig.brideAccounts && Array.isArray(remoteConfig.brideAccounts)) {
-          setBrideAccounts(remoteConfig.brideAccounts);
+          const nextBrideAccounts: BankAccountItem[] = remoteConfig.brideAccounts.map((acc: BankAccountItem) => ({
+            ...acc,
+            holder: replaceLegacyName(acc.holder) || acc.holder,
+          }));
+          normalizedBrideAccounts = nextBrideAccounts;
+          setBrideAccounts(nextBrideAccounts);
+        }
+
+        if (isAdmin && hadLegacyNames && !hasMigratedLegacyParentsRef.current) {
+          hasMigratedLegacyParentsRef.current = true;
+          void WeddingDataService.updateInvitationConfig({
+            groom: normalizedGroom,
+            bride: normalizedBride,
+            ...(normalizedGroomAccounts ? { groomAccounts: normalizedGroomAccounts } : {}),
+            ...(normalizedBrideAccounts ? { brideAccounts: normalizedBrideAccounts } : {}),
+          }).catch(() => {
+            hasMigratedLegacyParentsRef.current = false;
+          });
         }
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [isAdmin]);
+
+  // Admin-only real-time subscription to guest RSVPs
+  useEffect(() => {
+    if (!isAdmin) {
+      setRsvpList([]);
+      return;
+    }
+    const unsubscribe = WeddingDataService.subscribeRsvps((items) => {
+      setRsvpList(items);
+    });
+    return () => unsubscribe();
+  }, [isAdmin]);
+
+  const rsvpSummary = useMemo(() => {
+    const sortByKoreanName = (a: FirestoreRsvpItem, b: FirestoreRsvpItem) =>
+      a.name.localeCompare(b.name, 'ko-KR');
+
+    const groomAttending = rsvpList
+      .filter((r) => r.side === 'groom' && r.attendance === 'attending')
+      .sort(sortByKoreanName);
+    const groomNotAttending = rsvpList
+      .filter((r) => r.side === 'groom' && r.attendance === 'not_attending')
+      .sort(sortByKoreanName);
+    const brideAttending = rsvpList
+      .filter((r) => r.side === 'bride' && r.attendance === 'attending')
+      .sort(sortByKoreanName);
+    const brideNotAttending = rsvpList
+      .filter((r) => r.side === 'bride' && r.attendance === 'not_attending')
+      .sort(sortByKoreanName);
+
+    const groomGuestTotal = groomAttending.reduce((sum, r) => sum + (r.guestCount || 0), 0);
+    const brideGuestTotal = brideAttending.reduce((sum, r) => sum + (r.guestCount || 0), 0);
+
+    return {
+      groomAttending,
+      groomNotAttending,
+      brideAttending,
+      brideNotAttending,
+      groomGuestTotal,
+      brideGuestTotal,
+      totalGuestCount: groomGuestTotal + brideGuestTotal,
+      totalNotAttendingCount: groomNotAttending.length + brideNotAttending.length,
+    };
+  }, [rsvpList]);
+
+  const formatPhoneInput = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, digits.length - 4)}-${digits.slice(digits.length - 4)}`;
+  };
+
+  const handleRsvpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rsvpName.trim()) {
+      onShowToast('성함을 입력해주세요!');
+      return;
+    }
+    if (!rsvpSide) {
+      onShowToast('신랑하객 / 신부하객을 선택해주세요!');
+      return;
+    }
+    const phoneDigits = rsvpPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 8 || rsvpPhone.trim().length < 7) {
+      onShowToast('연락처를 정확히 입력해주세요!');
+      return;
+    }
+    if (!rsvpAttendance) {
+      onShowToast('결혼식 참석여부를 선택해주세요!');
+      return;
+    }
+
+    setIsSubmittingRsvp(true);
+    try {
+      await WeddingDataService.submitRsvp({
+        name: rsvpName.trim(),
+        side: rsvpSide,
+        phone: rsvpPhone.trim(),
+        attendance: rsvpAttendance,
+        guestCount: rsvpAttendance === 'attending' ? rsvpGuestCount : 0,
+      });
+
+      bgmPlayer.playChime();
+      setRsvpName('');
+      setRsvpSide('');
+      setRsvpPhone('');
+      setRsvpAttendance('');
+      setRsvpGuestCount(1);
+      setRsvpSubmitted(true);
+      onShowToast('참석 여부가 전달되었습니다! 감사합니다 💕');
+    } catch (error) {
+      console.error(error);
+      onShowToast('참석 여부 전달에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSubmittingRsvp(false);
+    }
+  };
+
+  const handleConfirmDeleteRsvp = async () => {
+    if (!rsvpToDelete) return;
+    try {
+      await WeddingDataService.deleteRsvp(rsvpToDelete.id);
+      setRsvpToDelete(null);
+      bgmPlayer.playChime();
+      onShowToast('참석 응답 내역을 삭제했습니다.');
+    } catch {
+      onShowToast('삭제에 실패했습니다.');
+    }
+  };
 
   const handleSecretTap = () => {
     const now = Date.now();
@@ -837,6 +1052,432 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ onShowToast }) =
           </div>
         </div>
       </div>
+
+      {/* 📋 결혼식 참석 여부 전달하기 (축하 연락처 아래) */}
+      <div className="retro-box p-4 bg-white space-y-3">
+        <div className="flex items-center justify-between border-b-2 border-dashed border-[#dcd1be] pb-2">
+          <div className="flex items-center gap-1.5">
+            <UserCheck className="w-4 h-4 text-[#2E8BFF]" />
+            <h3 className="font-pixel text-sm font-bold text-[#3B2F2F]">결혼식 참석 여부 전달</h3>
+          </div>
+          <span className="text-[10px] font-pixel text-[#888888]">RSVP</span>
+        </div>
+
+        <p className="text-[11px] font-body text-[#666666] leading-relaxed">
+          소중한 발걸음을 미리 준비할 수 있도록 참석 여부를 알려주세요.
+        </p>
+
+        {rsvpSubmitted ? (
+          <div className="bg-[#EBF4FF] border-2 border-[#2E8BFF] rounded p-3.5 text-center space-y-2.5 animate-fadeIn">
+            <div className="text-xl">💌</div>
+            <div className="font-pixel text-xs font-bold text-[#1C74E0]">
+              소중한 참석 의사가 전달되었습니다!
+            </div>
+            <p className="text-[11px] font-body text-[#555555]">
+              기쁜 날 따뜻한 축복으로 함께해주셔서 감사합니다.
+            </p>
+            <button
+              type="button"
+              onClick={() => setRsvpSubmitted(false)}
+              className="retro-btn bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] px-3 py-1.5 text-[11px] font-pixel cursor-pointer"
+            >
+              추가로 등록하기
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleRsvpSubmit} className="space-y-2.5 text-xs">
+            {/* 1. 이름 */}
+            <div className="space-y-1">
+              <label className="block font-pixel text-[11px] text-[#3B2F2F]">
+                이름 <span className="text-[#E03131]">*</span>
+              </label>
+              <input
+                type="text"
+                value={rsvpName}
+                onChange={(e) => setRsvpName(e.target.value)}
+                placeholder="성함을 입력해주세요"
+                maxLength={30}
+                className="w-full font-pixel text-xs px-2.5 py-2 border-2 border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF] shadow-[1px_1px_0_#3B2F2F]"
+              />
+            </div>
+
+            {/* 2. 신랑하객 / 신부하객 */}
+            <div className="space-y-1">
+              <label className="block font-pixel text-[11px] text-[#3B2F2F]">
+                하객 구분 <span className="text-[#E03131]">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 font-pixel text-center">
+                <button
+                  type="button"
+                  onClick={() => setRsvpSide('groom')}
+                  className={`py-2 rounded border-2 cursor-pointer transition-all ${
+                    rsvpSide === 'groom'
+                      ? 'bg-[#2E8BFF] text-white border-[#3B2F2F] shadow-[1px_1px_0_#3B2F2F]'
+                      : 'bg-[#FFFDF9] text-[#3B2F2F] border-[#dcd1be] hover:border-[#3B2F2F]'
+                  }`}
+                >
+                  🤵 신랑하객
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRsvpSide('bride')}
+                  className={`py-2 rounded border-2 cursor-pointer transition-all ${
+                    rsvpSide === 'bride'
+                      ? 'bg-[#F4A6B7] text-[#3B2F2F] font-bold border-[#3B2F2F] shadow-[1px_1px_0_#3B2F2F]'
+                      : 'bg-[#FFFDF9] text-[#3B2F2F] border-[#dcd1be] hover:border-[#3B2F2F]'
+                  }`}
+                >
+                  👰 신부하객
+                </button>
+              </div>
+            </div>
+
+            {/* 3. 연락처 */}
+            <div className="space-y-1">
+              <label className="block font-pixel text-[11px] text-[#3B2F2F]">
+                연락처 <span className="text-[#E03131]">*</span>
+              </label>
+              <input
+                type="tel"
+                value={rsvpPhone}
+                onChange={(e) => setRsvpPhone(formatPhoneInput(e.target.value))}
+                placeholder="010-1234-5678"
+                maxLength={20}
+                className="w-full font-pixel text-xs px-2.5 py-2 border-2 border-[#3B2F2F] rounded bg-[#FFFDF9] outline-none focus:border-[#2E8BFF] shadow-[1px_1px_0_#3B2F2F]"
+              />
+            </div>
+
+            {/* 4. 참석여부 */}
+            <div className="space-y-1">
+              <label className="block font-pixel text-[11px] text-[#3B2F2F]">
+                참석여부 <span className="text-[#E03131]">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 font-pixel text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRsvpAttendance('attending');
+                    if (rsvpGuestCount < 1) setRsvpGuestCount(1);
+                  }}
+                  className={`py-2 rounded border-2 cursor-pointer transition-all ${
+                    rsvpAttendance === 'attending'
+                      ? 'bg-[#2E8BFF] text-white border-[#3B2F2F] shadow-[1px_1px_0_#3B2F2F]'
+                      : 'bg-[#FFFDF9] text-[#3B2F2F] border-[#dcd1be] hover:border-[#3B2F2F]'
+                  }`}
+                >
+                  참석
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRsvpAttendance('not_attending')}
+                  className={`py-2 rounded border-2 cursor-pointer transition-all ${
+                    rsvpAttendance === 'not_attending'
+                      ? 'bg-[#5C544E] text-white border-[#3B2F2F] shadow-[1px_1px_0_#3B2F2F]'
+                      : 'bg-[#FFFDF9] text-[#3B2F2F] border-[#dcd1be] hover:border-[#3B2F2F]'
+                  }`}
+                >
+                  불참석
+                </button>
+              </div>
+            </div>
+
+            {/* 5. 동반 인원 수 (본인 포함 총 인원) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between font-pixel text-[11px] text-[#3B2F2F]">
+                <span>동반 인원 수 (본인 포함 총 인원)</span>
+                <span className="text-[#2E8BFF] font-bold">
+                  {rsvpAttendance === 'not_attending' ? '0명' : `${rsvpGuestCount}명`}
+                </span>
+              </div>
+              {rsvpAttendance === 'not_attending' ? (
+                <div className="w-full py-2 px-3 rounded border border-dashed border-[#dcd1be] bg-[#FAF7F0] text-[11px] font-pixel text-[#888888] text-center">
+                  불참석 선택 시 인원수는 0명으로 집계됩니다.
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRsvpGuestCount((prev) => Math.max(1, prev - 1))}
+                    className="retro-btn bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] w-10 py-1.5 font-pixel text-sm cursor-pointer"
+                  >
+                    -
+                  </button>
+                  <div className="flex-1 text-center font-pixel text-xs py-1.5 bg-[#FFFDF9] border-2 border-[#3B2F2F] rounded">
+                    총 <span className="font-bold text-[#2E8BFF] text-sm">{rsvpGuestCount}</span>명
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRsvpGuestCount((prev) => Math.min(20, prev + 1))}
+                    className="retro-btn bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] w-10 py-1.5 font-pixel text-sm cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmittingRsvp}
+              className="w-full retro-btn-blue py-2.5 text-xs font-pixel flex items-center justify-center gap-1.5 cursor-pointer hover:brightness-105 active:translate-x-0.5 active:translate-y-0.5"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>{isSubmittingRsvp ? '전달 중...' : '참석 여부 전달하기'}</span>
+            </button>
+          </form>
+        )}
+
+        {/* 관리자 전용 참석/불참석자 명단 및 총 인원수 (신랑하객 / 신부하객 분리, 가나다순) */}
+        {isAdmin && (
+          <div className="mt-3 pt-3 border-t-2 border-dashed border-[#3B2F2F] space-y-2.5 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-[#D9480F]" />
+                <span className="font-pixel text-xs font-bold text-[#D9480F]">
+                  관리자 전용 · 하객 참석 현황
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdminRsvpPanel((prev) => !prev)}
+                className="text-[11px] font-pixel text-[#555555] hover:text-[#3B2F2F] flex items-center gap-0.5 cursor-pointer"
+              >
+                <span>{showAdminRsvpPanel ? '접기' : '펼치기'}</span>
+                {showAdminRsvpPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* 전체 요약 배너 */}
+            <div className="bg-[#FFF8E7] border-2 border-[#D9480F] rounded p-2.5 space-y-1.5 shadow-[2px_2px_0_#D9480F]">
+              <div className="flex items-center justify-between font-pixel text-xs">
+                <span className="text-[#3B2F2F] font-bold">총 참석 인원</span>
+                <span className="text-[#D9480F] font-bold text-sm">
+                  총 {rsvpSummary.totalGuestCount}명
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-pixel text-[#555555]">
+                <span>
+                  신랑측 {rsvpSummary.groomGuestTotal}명 · 신부측 {rsvpSummary.brideGuestTotal}명
+                </span>
+                <span>불참석 {rsvpSummary.totalNotAttendingCount}명</span>
+              </div>
+            </div>
+
+            {showAdminRsvpPanel && (
+              <div className="space-y-3">
+                {/* 신랑하객 명단 */}
+                <div className="bg-[#EBF4FF]/60 border-2 border-[#3B2F2F] rounded p-2.5 space-y-2">
+                  <div className="flex items-center justify-between border-b border-[#2E8BFF]/40 pb-1.5 font-pixel">
+                    <span className="text-xs font-bold text-[#1C74E0]">🤵 신랑하객 명단</span>
+                    <span className="text-[11px] text-[#3B2F2F]">
+                      참석 <strong className="text-[#1C74E0]">{rsvpSummary.groomGuestTotal}명</strong>
+                      {' · '}불참 {rsvpSummary.groomNotAttending.length}명
+                    </span>
+                  </div>
+
+                  {/* 신랑하객 참석 (가나다순) */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-pixel font-bold text-[#1C74E0]">
+                      참석자 ({rsvpSummary.groomAttending.length}건 · 총 {rsvpSummary.groomGuestTotal}명 · 가나다순)
+                    </div>
+                    {rsvpSummary.groomAttending.length === 0 ? (
+                      <div className="text-[10px] font-pixel text-[#888888] bg-white/80 rounded px-2 py-1.5 text-center">
+                        등록된 신랑하객 참석자가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {rsvpSummary.groomAttending.map((item) => (
+                          <div
+                            key={item.id}
+                            className="bg-white border border-[#dcd1be] rounded px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] font-pixel"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 truncate">
+                              <span className="font-bold text-[#3B2F2F]">{item.name}</span>
+                              <span className="text-[10px] text-[#666666]">{item.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="bg-[#EBF4FF] text-[#1C74E0] border border-[#2E8BFF]/40 px-1.5 py-0.2 rounded text-[10px]">
+                                {item.guestCount}명
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setRsvpToDelete(item)}
+                                className="text-[#E03131] hover:bg-[#FFF0F4] p-0.5 rounded cursor-pointer"
+                                title="삭제"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 신랑하객 불참석 (가나다순) */}
+                  <div className="space-y-1 pt-1">
+                    <div className="text-[10px] font-pixel font-bold text-[#666666]">
+                      불참석자 ({rsvpSummary.groomNotAttending.length}명 · 가나다순)
+                    </div>
+                    {rsvpSummary.groomNotAttending.length === 0 ? (
+                      <div className="text-[10px] font-pixel text-[#888888] bg-white/80 rounded px-2 py-1.5 text-center">
+                        등록된 신랑하객 불참석자가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {rsvpSummary.groomNotAttending.map((item) => (
+                          <div
+                            key={item.id}
+                            className="bg-white/90 border border-[#dcd1be] rounded px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] font-pixel"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 truncate">
+                              <span className="font-bold text-[#555555]">{item.name}</span>
+                              <span className="text-[10px] text-[#888888]">{item.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="bg-[#F3F1EC] text-[#666666] border border-[#dcd1be] px-1.5 py-0.2 rounded text-[10px]">
+                                불참석
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setRsvpToDelete(item)}
+                                className="text-[#E03131] hover:bg-[#FFF0F4] p-0.5 rounded cursor-pointer"
+                                title="삭제"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 신부하객 명단 */}
+                <div className="bg-[#FFF0F4]/70 border-2 border-[#3B2F2F] rounded p-2.5 space-y-2">
+                  <div className="flex items-center justify-between border-b border-[#F4A6B7] pb-1.5 font-pixel">
+                    <span className="text-xs font-bold text-[#D6336C]">👰 신부하객 명단</span>
+                    <span className="text-[11px] text-[#3B2F2F]">
+                      참석 <strong className="text-[#D6336C]">{rsvpSummary.brideGuestTotal}명</strong>
+                      {' · '}불참 {rsvpSummary.brideNotAttending.length}명
+                    </span>
+                  </div>
+
+                  {/* 신부하객 참석 (가나다순) */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-pixel font-bold text-[#D6336C]">
+                      참석자 ({rsvpSummary.brideAttending.length}건 · 총 {rsvpSummary.brideGuestTotal}명 · 가나다순)
+                    </div>
+                    {rsvpSummary.brideAttending.length === 0 ? (
+                      <div className="text-[10px] font-pixel text-[#888888] bg-white/80 rounded px-2 py-1.5 text-center">
+                        등록된 신부하객 참석자가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {rsvpSummary.brideAttending.map((item) => (
+                          <div
+                            key={item.id}
+                            className="bg-white border border-[#dcd1be] rounded px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] font-pixel"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 truncate">
+                              <span className="font-bold text-[#3B2F2F]">{item.name}</span>
+                              <span className="text-[10px] text-[#666666]">{item.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="bg-[#FFF0F4] text-[#D6336C] border border-[#F4A6B7] px-1.5 py-0.2 rounded text-[10px]">
+                                {item.guestCount}명
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setRsvpToDelete(item)}
+                                className="text-[#E03131] hover:bg-[#FFF0F4] p-0.5 rounded cursor-pointer"
+                                title="삭제"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 신부하객 불참석 (가나다순) */}
+                  <div className="space-y-1 pt-1">
+                    <div className="text-[10px] font-pixel font-bold text-[#666666]">
+                      불참석자 ({rsvpSummary.brideNotAttending.length}명 · 가나다순)
+                    </div>
+                    {rsvpSummary.brideNotAttending.length === 0 ? (
+                      <div className="text-[10px] font-pixel text-[#888888] bg-white/80 rounded px-2 py-1.5 text-center">
+                        등록된 신부하객 불참석자가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {rsvpSummary.brideNotAttending.map((item) => (
+                          <div
+                            key={item.id}
+                            className="bg-white/90 border border-[#dcd1be] rounded px-2 py-1.5 flex items-center justify-between gap-2 text-[11px] font-pixel"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 truncate">
+                              <span className="font-bold text-[#555555]">{item.name}</span>
+                              <span className="text-[10px] text-[#888888]">{item.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="bg-[#F3F1EC] text-[#666666] border border-[#dcd1be] px-1.5 py-0.2 rounded text-[10px]">
+                                불참석
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setRsvpToDelete(item)}
+                                className="text-[#E03131] hover:bg-[#FFF0F4] p-0.5 rounded cursor-pointer"
+                                title="삭제"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Delete RSVP Confirmation Modal */}
+      {rsvpToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="retro-box bg-white max-w-xs w-full p-4 space-y-3 shadow-[5px_5px_0_#E03131]">
+            <div className="flex items-center gap-2 text-[#E03131] border-b border-[#3B2F2F] pb-1.5">
+              <Trash2 className="w-4 h-4" />
+              <h4 className="font-pixel text-xs font-bold">참석 응답 삭제</h4>
+            </div>
+            <p className="font-body text-xs text-[#3B2F2F] leading-relaxed">
+              <strong>{rsvpToDelete.name}</strong> ({rsvpToDelete.side === 'groom' ? '신랑하객' : '신부하객'}) 님의 참석 응답을 삭제할까요?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setRsvpToDelete(null)}
+                className="retro-btn bg-white hover:bg-[#FAF7F0] text-[#3B2F2F] px-3 py-1.5 text-xs font-pixel cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteRsvp}
+                className="retro-btn bg-[#E03131] text-white px-3 py-1.5 text-xs font-pixel cursor-pointer hover:brightness-110"
+              >
+                삭제하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 💌 마음 전하실 곳 (계좌번호 목록 및 관리자 추가/편집/삭제) */}
       <div className="retro-box p-4 bg-white space-y-3">

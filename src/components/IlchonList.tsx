@@ -3,7 +3,7 @@ import { Heart, UserPlus, Sparkles, Check, Trash2, Clock, X, AlertTriangle } fro
 import { useAuth } from '../context/AuthContext';
 import { 
   WeddingDataService, 
-  FirestoreIlchonItem 
+  FirestoreIlchonItem
 } from '../services/weddingDataService';
 import { WEDDING_CONFIG } from '../config/weddingConfig';
 import { bgmPlayer } from '../utils/soundSynthesizer';
@@ -379,7 +379,7 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
       {/* 일촌 신청하기 Modal Popup */}
       {showApplyModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
-          <div className="retro-box bg-white max-w-sm w-full p-4 space-y-3 shadow-[6px_6px_0_#2E8BFF]">
+          <div className="retro-box bg-white max-w-sm w-full max-h-[90vh] overflow-y-auto p-4 space-y-3 shadow-[6px_6px_0_#2E8BFF]">
             <div className="flex items-center justify-between border-b-2 border-[#3B2F2F] pb-2">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-[#2E8BFF]" />

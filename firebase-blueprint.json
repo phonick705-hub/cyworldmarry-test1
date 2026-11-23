@@ -147,6 +147,7 @@
         "createdAt": { "type": "string", "maxLength": 40 },
         "posX": { "type": "number" },
         "posY": { "type": "number" },
+        "hidden": { "type": "boolean" },
         "updatedAt": { "type": "string", "maxLength": 40 }
       },
       "required": ["giftId", "name", "emoji", "senderName", "createdAt"]
@@ -186,6 +187,20 @@
         "createdAt": { "type": "string", "maxLength": 40 }
       },
       "required": ["email", "addedBy", "createdAt"]
+    },
+    "RsvpEntry": {
+      "title": "RsvpEntry",
+      "description": "Wedding guest RSVP submission with side, phone, attendance, and headcount",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 30 },
+        "side": { "type": "string", "enum": ["groom", "bride"] },
+        "phone": { "type": "string", "maxLength": 20 },
+        "attendance": { "type": "string", "enum": ["attending", "not_attending"] },
+        "guestCount": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["name", "side", "phone", "attendance", "guestCount", "createdAt"]
     }
   },
   "firestore": {
@@ -232,6 +247,10 @@
     "/admins/{adminEmail}": {
       "schema": { "$ref": "#/entities/AdminAccount" },
       "description": "Collection of additional authorized administrator email accounts"
+    },
+    "/rsvps/{rsvpId}": {
+      "schema": { "$ref": "#/entities/RsvpEntry" },
+      "description": "Collection of guest wedding attendance RSVPs (Admin-only read)"
     }
   }
 }

@@ -2,6 +2,7 @@ import {
   collection,
   doc, 
   getDoc, 
+  getDocsFromServer,
   setDoc, 
   addDoc,
   deleteDoc,
@@ -49,6 +50,7 @@ export interface DisplayedMiniroomGift {
   createdAt: string;
   posX?: number;
   posY?: number;
+  hidden?: boolean;
   updatedAt?: string;
 }
 
@@ -705,47 +707,135 @@ export class AcornService {
     }
   }
 
-  private static writeLocalMiniroomGifts(gifts: DisplayedMiniroomGift[]): void {
+  private static writeLocalMiniroomGifts(
+    gifts: DisplayedMiniroomGift[],
+    dispatchEvent = true
+  ): void {
     try {
       localStorage.setItem(LOCAL_GIFTS_KEY, JSON.stringify(gifts));
-      window.dispatchEvent(new CustomEvent(LOCAL_GIFTS_EVENT_NAME, { detail: gifts }));
+      if (dispatchEvent) {
+        window.dispatchEvent(new CustomEvent(LOCAL_GIFTS_EVENT_NAME, { detail: gifts }));
+      }
     } catch {
       // Ignore storage errors
     }
   }
 
+  private static isFlushingLocalGifts = false;
+
   /**
-   * Subscribe to gifts displayed in the Miniroom (Firestore + localStorage fallback).
+   * Automatically uploads any legacy local-only gifts (`local-gift-...`) to Firestore
+   * so gifts created during offline/fallback states appear on all devices.
+   */
+  public static async flushPendingLocalGifts(): Promise<void> {
+    if (this.isFlushingLocalGifts) return;
+    const localGifts = this.readLocalMiniroomGifts();
+    const pendingLocal = localGifts.filter((g) => g.id.startsWith('local-gift-'));
+    if (pendingLocal.length === 0) return;
+
+    this.isFlushingLocalGifts = true;
+    try {
+      let currentLocal = [...localGifts];
+      for (const lg of pendingLocal) {
+        try {
+          const payload = {
+            giftId: (lg.giftId || '').slice(0, 50),
+            name: (lg.name || '축하 선물').slice(0, 50),
+            emoji: (lg.emoji || '🎁').slice(0, 10),
+            senderName: (lg.senderName || '축하 하객').trim().slice(0, 30) || '축하 하객',
+            senderUid: (lg.senderUid || 'guest').slice(0, 128),
+            createdAt: (lg.createdAt || new Date().toISOString()).slice(0, 40),
+          };
+          const docRef = await addDoc(collection(db, MINIROOM_GIFTS_PATH), payload);
+          currentLocal = currentLocal.map((item) =>
+            item.id === lg.id ? { ...item, ...payload, id: docRef.id } : item
+          );
+          this.writeLocalMiniroomGifts(currentLocal, true);
+        } catch (err) {
+          console.warn('Pending local gift sync deferred:', err);
+        }
+      }
+    } finally {
+      this.isFlushingLocalGifts = false;
+    }
+  }
+
+  /**
+   * Subscribe to gifts displayed in the Miniroom across all devices via Firestore real-time + server refresh.
    */
   public static subscribeMiniroomGifts(
     onData: (gifts: DisplayedMiniroomGift[]) => void
   ): () => void {
     let remoteGifts: DisplayedMiniroomGift[] = [];
+    let hasRemoteSync = false;
 
     const emitMerged = () => {
       const localGifts = this.readLocalMiniroomGifts();
+      if (!hasRemoteSync) {
+        const sortedLocal = [...localGifts].sort((a, b) =>
+          (a.createdAt || '').localeCompare(b.createdAt || '')
+        );
+        onData(sortedLocal);
+        return;
+      }
+
       const map = new Map<string, DisplayedMiniroomGift>();
       for (const g of remoteGifts) {
         map.set(g.id, g);
       }
+
+      // Keep only genuinely unsynced local-gift-* items not yet confirmed in remoteGifts
+      const remainingLocalPending: DisplayedMiniroomGift[] = [];
       for (const lg of localGifts) {
+        if (!lg.id.startsWith('local-gift-')) continue;
         const existsInRemote = remoteGifts.some(
           (rg) => rg.id === lg.id || (rg.giftId === lg.giftId && rg.createdAt === lg.createdAt)
         );
         if (!existsInRemote) {
           map.set(lg.id, lg);
+          remainingLocalPending.push(lg);
         }
       }
-      const list = Array.from(map.values()).sort((a, b) =>
+
+      const mergedList = Array.from(map.values()).sort((a, b) =>
         (a.createdAt || '').localeCompare(b.createdAt || '')
       );
-      onData(list);
+      this.writeLocalMiniroomGifts([...remoteGifts, ...remainingLocalPending], false);
+      onData(mergedList);
+    };
+
+    const refreshFromServer = async () => {
+      try {
+        await this.flushPendingLocalGifts();
+        const snapshot = await getDocsFromServer(collection(db, MINIROOM_GIFTS_PATH));
+        remoteGifts = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<DisplayedMiniroomGift, 'id'>),
+        }));
+        hasRemoteSync = true;
+        emitMerged();
+      } catch (error) {
+        console.warn('Firestore miniroomGifts server refresh notice:', error);
+      }
     };
 
     emitMerged();
+    void refreshFromServer();
 
     const handleLocalGiftEvent = () => emitMerged();
+    const handleResumeSync = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshFromServer();
+      }
+    };
+    const handleOnlineSync = () => {
+      void refreshFromServer();
+    };
+
     window.addEventListener(LOCAL_GIFTS_EVENT_NAME, handleLocalGiftEvent);
+    window.addEventListener('online', handleOnlineSync);
+    window.addEventListener('focus', handleOnlineSync);
+    document.addEventListener('visibilitychange', handleResumeSync);
 
     const unsubFirestore = onSnapshot(
       collection(db, MINIROOM_GIFTS_PATH),
@@ -754,6 +844,7 @@ export class AcornService {
           id: d.id,
           ...(d.data() as Omit<DisplayedMiniroomGift, 'id'>),
         }));
+        hasRemoteSync = true;
         emitMerged();
       },
       (error) => {
@@ -764,6 +855,9 @@ export class AcornService {
 
     return () => {
       window.removeEventListener(LOCAL_GIFTS_EVENT_NAME, handleLocalGiftEvent);
+      window.removeEventListener('online', handleOnlineSync);
+      window.removeEventListener('focus', handleOnlineSync);
+      document.removeEventListener('visibilitychange', handleResumeSync);
       unsubFirestore();
     };
   }
@@ -847,7 +941,8 @@ export class AcornService {
   }
 
   /**
-   * Display a purchased gift in the Miniroom and unlock the '미니룸에 선물 보내기' mission reward button.
+   * Display a purchased gift in the Miniroom (must persist to Firestore so all devices see it)
+   * and unlock the '미니룸에 선물 보내기' mission reward button.
    */
   public static async displayGiftInMiniroom(
     uid: string,
@@ -856,8 +951,42 @@ export class AcornService {
   ): Promise<void> {
     const nowIso = new Date().toISOString();
     const cleanSender = (senderName || '').trim().slice(0, 30) || '축하 하객';
-    const local = this.readLocalProfile(uid);
+    const giftPayload = {
+      giftId: gift.id.slice(0, 50),
+      name: gift.name.slice(0, 50),
+      emoji: gift.emoji.slice(0, 10),
+      senderName: cleanSender,
+      senderUid: (uid || 'guest').slice(0, 128),
+      createdAt: nowIso,
+    };
 
+    let createdDocId: string | null = null;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const docRef = await addDoc(collection(db, MINIROOM_GIFTS_PATH), giftPayload);
+        createdDocId = docRef.id;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 450));
+        }
+      }
+    }
+
+    if (!createdDocId) {
+      handleFirestoreError(lastError, OperationType.CREATE, MINIROOM_GIFTS_PATH);
+    }
+
+    const currentLocalGifts = this.readLocalMiniroomGifts();
+    this.writeLocalMiniroomGifts([
+      ...currentLocalGifts,
+      { id: createdDocId, ...giftPayload },
+    ]);
+
+    const local = this.readLocalProfile(uid);
     const nextDisplayed = Array.from(new Set([...(local.displayedGiftIds || []), gift.id]));
     const nextPending = this.consumeOnePendingGift(local.pendingGiftIds || [], gift.id);
     const updatedLocal: UserAcornProfile = {
@@ -868,31 +997,6 @@ export class AcornService {
       updatedAt: nowIso,
     };
     this.writeLocalProfile(uid, updatedLocal);
-
-    const giftPayload = {
-      giftId: gift.id.slice(0, 50),
-      name: gift.name.slice(0, 50),
-      emoji: gift.emoji.slice(0, 10),
-      senderName: cleanSender,
-      senderUid: (uid || 'guest').slice(0, 128),
-      createdAt: nowIso,
-    };
-
-    try {
-      const docRef = await addDoc(collection(db, MINIROOM_GIFTS_PATH), giftPayload);
-      const currentLocalGifts = this.readLocalMiniroomGifts();
-      this.writeLocalMiniroomGifts([
-        ...currentLocalGifts,
-        { id: docRef.id, ...giftPayload },
-      ]);
-    } catch (error) {
-      console.warn('Firestore miniroomGift display fallback to local:', error);
-      const currentLocalGifts = this.readLocalMiniroomGifts();
-      this.writeLocalMiniroomGifts([
-        ...currentLocalGifts,
-        { id: `local-gift-${Date.now()}`, ...giftPayload },
-      ]);
-    }
 
     if (uid) {
       const userRef = doc(db, USERS_PATH, uid);
@@ -1059,7 +1163,29 @@ export class AcornService {
   }
 
   /**
-   * Admin helper to remove a displayed miniroom gift.
+   * Admin helper to hide or restore a gift on the Miniroom canvas while preserving the sender record.
+   */
+  public static async setMiniroomGiftHidden(giftDocId: string, hidden: boolean): Promise<void> {
+    const nowIso = new Date().toISOString();
+    const localGifts = this.readLocalMiniroomGifts().map((g) =>
+      g.id === giftDocId ? { ...g, hidden, updatedAt: nowIso } : g
+    );
+    this.writeLocalMiniroomGifts(localGifts);
+
+    if (!giftDocId.startsWith('local-gift-')) {
+      try {
+        await updateDoc(doc(db, MINIROOM_GIFTS_PATH, giftDocId), {
+          hidden,
+          updatedAt: nowIso,
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `${MINIROOM_GIFTS_PATH}/${giftDocId}`);
+      }
+    }
+  }
+
+  /**
+   * Admin helper to permanently delete a miniroom gift document.
    */
   public static async deleteMiniroomGift(giftDocId: string): Promise<void> {
     const localGifts = this.readLocalMiniroomGifts().filter((g) => g.id !== giftDocId);
