@@ -124,7 +124,7 @@ export const WEDDING_CONFIG = {
   miniroom: {
     todayWord: '우리 결혼합니다 💍',
     bgmTitle: '♬ 이루마 - Wedding March (Lo-Fi Ver.)',
-    todayVisits: 482,
+    todayVisits: 486,
     totalVisits: 13820,
     relationStartDate: '2025-11-08',
   },
