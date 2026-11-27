@@ -8,6 +8,7 @@ import {
 import { WEDDING_CONFIG } from '../config/weddingConfig';
 import { bgmPlayer } from '../utils/soundSynthesizer';
 import { AcornService } from '../services/acornService';
+import { AcornIcon } from './AcornIcon';
 
 interface IlchonListProps {
   onShowToast: (msg: string) => void;
@@ -542,8 +543,9 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
                 <br />
                 축하 메세지가 업로드 돼요❤️
               </p>
-              <div className="bg-[#FFF8E7] border border-[#FFD8A8] rounded px-3 py-2 text-[11px] font-pixel text-[#D9480F]">
-                🌰 도토리 상점에서 ‘소중한 인연 일촌 신청하기’ 도토리를 받으실 수 있어요!
+              <div className="bg-[#FFF8E7] border border-[#FFD8A8] rounded px-3 py-2 text-[11px] font-pixel text-[#D9480F] flex items-center justify-center gap-1 flex-wrap">
+                <AcornIcon className="w-3.5 h-3.5" />
+                <span>도토리 상점에서 ‘소중한 인연 일촌 신청하기’ 도토리를 받으실 수 있어요!</span>
               </div>
             </div>
 
@@ -557,7 +559,8 @@ export const IlchonList: React.FC<IlchonListProps> = ({ onShowToast, onGoToStore
                   }}
                   className="retro-btn-blue py-2.5 text-xs font-pixel flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>🌰 도토리 받으러 가기</span>
+                  <AcornIcon className="w-3.5 h-3.5" />
+                  <span>도토리 받으러 가기</span>
                 </button>
               )}
               <button

@@ -16,6 +16,7 @@ import { QuizQuestion, ACORN_CONFIG } from '../config/weddingConfig';
 import { WeddingDataService } from '../services/weddingDataService';
 import { AcornService } from '../services/acornService';
 import { bgmPlayer } from '../utils/soundSynthesizer';
+import { AcornIcon } from './AcornIcon';
 
 interface CoupleQuizModalProps {
   isOpen: boolean;
@@ -332,11 +333,16 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
               <div className="bg-[#FAF7F0] border-2 border-[#3B2F2F] rounded-lg p-3 space-y-1 text-xs font-pixel shadow-[2px_2px_0_#3B2F2F]">
                 <div className="flex items-center justify-center gap-1.5 text-sm font-bold text-[#D9480F]">
                   <span>이번 판에 적립된 도토리:</span>
-                  <span className="text-base">+{earnedInRound} 🌰</span>
+                  <span className="text-base inline-flex items-center gap-1">
+                    <span>+{earnedInRound}</span>
+                    <AcornIcon className="w-4 h-4" />
+                  </span>
                 </div>
                 {rewardNotice === 'daily_limit' && (
-                  <p className="text-[11px] text-[#888888] font-body">
-                    (오늘 하루 최대 한도 20🌰을 이미 모두 적립했어요)
+                  <p className="text-[11px] text-[#888888] font-body inline-flex items-center justify-center gap-0.5">
+                    <span>(오늘 하루 최대 한도 20</span>
+                    <AcornIcon className="w-3 h-3" />
+                    <span>을 이미 모두 적립했어요)</span>
                   </p>
                 )}
                 {rewardNotice === 'no_correct' && (
@@ -345,8 +351,9 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
                   </p>
                 )}
                 {/* Strict User Constraint: Do NOT show total balance, guide to store */}
-                <p className="text-[11px] text-[#2E8BFF] font-body pt-1">
-                  ※ 도토리 총 잔액은 스토어에서 확인해보세요 🌰
+                <p className="text-[11px] text-[#2E8BFF] font-body pt-1 inline-flex items-center justify-center gap-1">
+                  <span>※ 도토리 총 잔액은 스토어에서 확인해보세요</span>
+                  <AcornIcon className="w-3.5 h-3.5" />
                 </p>
               </div>
 
@@ -486,8 +493,9 @@ export const CoupleQuizModal: React.FC<CoupleQuizModalProps> = ({
           ) : null}
 
           {/* Footer Guide Note */}
-          <div className="text-center text-[11px] font-pixel text-[#888888] pt-2">
-            김재현 ♥ 정하은 커플 퀴즈 · 하루 최대 20 🌰
+          <div className="text-center text-[11px] font-pixel text-[#888888] pt-2 flex items-center justify-center gap-1">
+            <span>김재현 ♥ 정하은 커플 퀴즈 · 하루 최대 20</span>
+            <AcornIcon className="w-3.5 h-3.5" />
           </div>
         </div>
       </div>

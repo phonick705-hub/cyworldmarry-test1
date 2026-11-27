@@ -402,7 +402,7 @@ export const Miniroom: React.FC<MiniroomProps> = ({
     if (giftImageUrl) {
       const sizeClass =
         prod?.miniroomSizeClass ||
-        (prod?.placement === 'top' ? 'w-7 h-[42px]' : 'w-12 h-[78px]');
+        (prod?.placement === 'top' ? 'w-7 h-[42px]' : 'w-10 h-[64px]');
       return (
         <div
           key={gift.id}

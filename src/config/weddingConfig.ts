@@ -426,6 +426,7 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
     price: 10,
     description: '사랑스러운 분홍 리본의 축하 화환',
     imageUrl: '/assets/aistudio/gift_wreath_v4_pink_x3_8b4bfe69.png',
+    miniroomSizeClass: 'w-10 h-[64px]',
     placement: 'bottom',
   },
   {
@@ -435,6 +436,7 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
     price: 10,
     description: '화사한 노랑 리본의 축하 화환',
     imageUrl: '/assets/aistudio/gift_wreath_v4_yellow_x3_a59c27dd.png',
+    miniroomSizeClass: 'w-10 h-[64px]',
     placement: 'bottom',
   },
   {
@@ -444,6 +446,7 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
     price: 10,
     description: '축복이 가득 담긴 빨강 리본의 축하 화환',
     imageUrl: '/assets/aistudio/gift_wreath_v4_red_x3_47b0e536.png',
+    miniroomSizeClass: 'w-10 h-[64px]',
     placement: 'bottom',
   },
   {
@@ -462,12 +465,12 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
   },
   {
     id: 'gift-ring',
-    name: '영원한 반지 쿠션',
+    name: '다이아반지',
     emoji: '💍',
     price: 20,
-    description: '평생의 약속을 빛내는 링 쿠션',
-    miniroomImageUrl: '/assets/gift_ring_x3.png',
-    miniroomSizeClass: 'w-8 h-8',
+    description: '평생의 약속을 빛내는 반짝이는 다이아반지',
+    imageUrl: '/assets/aistudio/gift_diamond_ring_v4_x3_34bf4f16.png',
+    miniroomSizeClass: 'w-9 h-9',
     placement: 'bottom',
   },
 ];

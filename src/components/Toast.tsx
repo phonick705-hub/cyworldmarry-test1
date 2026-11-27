@@ -1,11 +1,25 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2 } from 'lucide-react';
+import { AcornIcon } from './AcornIcon';
 
 interface ToastProps {
   message: string | null;
   onClose?: () => void;
 }
+
+const renderToastMessage = (message: string) => {
+  if (!message.includes('🌰')) return message;
+  const parts = message.split('🌰');
+  return parts.map((part, idx) => (
+    <React.Fragment key={idx}>
+      {part}
+      {idx < parts.length - 1 && (
+        <AcornIcon className="w-3.5 h-3.5 inline-block align-text-bottom mx-0.5" />
+      )}
+    </React.Fragment>
+  ));
+};
 
 export const Toast: React.FC<ToastProps> = ({ message }) => {
   return (
@@ -21,7 +35,9 @@ export const Toast: React.FC<ToastProps> = ({ message }) => {
           <div className="retro-box bg-white text-black px-4 py-3 flex items-center justify-between gap-3 shadow-[4px_4px_0_#2E8BFF]">
             <div className="flex items-center gap-2.5">
               <span className="text-[#2E8BFF] text-lg font-pixel">★</span>
-              <p className="font-pixel text-xs sm:text-sm tracking-wide text-black">{message}</p>
+              <p className="font-pixel text-xs sm:text-sm tracking-wide text-black">
+                {renderToastMessage(message)}
+              </p>
             </div>
             <CheckCircle2 className="w-4 h-4 text-[#2E8BFF] shrink-0" />
           </div>

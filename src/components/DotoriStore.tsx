@@ -19,6 +19,7 @@ import {
 } from '../config/weddingConfig';
 import { TabType } from './TabBar';
 import { CoupleQuizModal } from './CoupleQuizModal';
+import { AcornIcon } from './AcornIcon';
 
 interface DotoriStoreProps {
   onNavigateTab: (tab: TabType) => void;
@@ -173,7 +174,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
       {/* Store Header Bar */}
       <div className="retro-box-cream p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🌰</span>
+          <AcornIcon className="w-6 h-6 shrink-0" />
           <div>
             <h2 className="font-pixel text-sm sm:text-base font-bold text-[#3B2F2F]">
               도토리 상점
@@ -189,11 +190,11 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         </div>
       </div>
 
-      {/* 1. 상단: "내 도토리 🌰 N개" 큰 잔액 카드 */}
+      {/* 1. 상단: 내 도토리 N개 큰 잔액 카드 */}
       <div className="retro-box bg-[#FFFDF9] p-5 text-center space-y-2 relative overflow-hidden shadow-[4px_4px_0_#3B2F2F]">
         {/* Subtle decorative background acorn icon */}
-        <div className="absolute -right-4 -bottom-4 text-7xl opacity-10 select-none pointer-events-none">
-          🌰
+        <div className="absolute -right-2 -bottom-2 opacity-10 select-none pointer-events-none">
+          <AcornIcon className="w-20 h-20" />
         </div>
 
         <div className="text-xs font-pixel text-[#888888] flex items-center justify-center gap-1">
@@ -202,7 +203,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
         </div>
 
         <div className="flex items-center justify-center gap-2 py-1">
-          <span className="text-3xl sm:text-4xl">🌰</span>
+          <AcornIcon className="w-8 h-8 sm:w-10 sm:h-10 shrink-0" />
           <span className="font-pixel text-3xl sm:text-4xl font-bold text-[#3B2F2F] tracking-tight">
             {loading ? '...' : profile.acorns.toLocaleString()}
           </span>
@@ -223,8 +224,9 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
             <span>📋</span>
             <span>도토리 모으는 방법</span>
           </h3>
-          <span className="font-pixel text-[10px] text-[#2E8BFF]">
-            각 미션 1회 적립 · 퀴즈는 하루 최대 20🌰
+          <span className="font-pixel text-[10px] text-[#2E8BFF] inline-flex items-center gap-0.5">
+            <span>각 미션 1회 적립 · 퀴즈는 하루 최대 20</span>
+            <AcornIcon className="w-3 h-3" />
           </span>
         </div>
 
@@ -242,8 +244,9 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                 <span className="text-[#3B2F2F] font-bold">
                   첫 방문 감사 선물
                 </span>
-                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
-                  +{ACORN_CONFIG.WELCOME_REWARD} 🌰
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                  <span>+{ACORN_CONFIG.WELCOME_REWARD}</span>
+                  <AcornIcon className="w-3 h-3" />
                 </span>
               </div>
             </div>
@@ -284,8 +287,9 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                 <span className="text-[#3B2F2F] font-bold">
                   소중한 인연 일촌 신청하기
                 </span>
-                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
-                  +{ACORN_CONFIG.ILCHON_REWARD} 🌰
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                  <span>+{ACORN_CONFIG.ILCHON_REWARD}</span>
+                  <AcornIcon className="w-3 h-3" />
                 </span>
               </div>
               {!profile.claimed?.ilchon && !profile.eligible?.ilchon && (
@@ -344,8 +348,9 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                 <span className="text-[#3B2F2F] font-bold">
                   커플 퀴즈 풀기
                 </span>
-                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
-                  최대 +{ACORN_CONFIG.QUIZ_DAILY_MAX} 🌰
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                  <span>최대 +{ACORN_CONFIG.QUIZ_DAILY_MAX}</span>
+                  <AcornIcon className="w-3 h-3" />
                 </span>
               </div>
             </div>
@@ -381,8 +386,9 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                 <span className="text-[#3B2F2F] font-bold">
                   미니룸에 선물 보내기
                 </span>
-                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded">
-                  +{ACORN_CONFIG.MINIROOM_GIFT_REWARD} 🌰
+                <span className="bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] text-[10px] px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                  <span>+{ACORN_CONFIG.MINIROOM_GIFT_REWARD}</span>
+                  <AcornIcon className="w-3 h-3" />
                 </span>
               </div>
               {!isMiniroomGiftCompleted && !isMiniroomGiftEligible && (
@@ -481,8 +487,9 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                         gift.emoji
                       )}
                     </div>
-                    <span className="font-pixel text-[10px] font-bold bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] px-1.5 py-0.5 rounded">
-                      🌰 {gift.price}개
+                    <span className="font-pixel text-[10px] font-bold bg-[#FFF4E6] text-[#D9480F] border border-[#FFD8A8] px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                      <AcornIcon className="w-3 h-3" />
+                      <span>{gift.price}개</span>
                     </span>
                   </div>
 
@@ -586,8 +593,10 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                 <div className="font-body text-[11px] text-[#666666]">
                   {selectedGiftModal.gift.description}
                 </div>
-                <div className="font-pixel text-[11px] text-[#D9480F] font-bold">
-                  가격: 🌰 {selectedGiftModal.gift.price}개
+                <div className="font-pixel text-[11px] text-[#D9480F] font-bold inline-flex items-center gap-1">
+                  <span>가격:</span>
+                  <AcornIcon className="w-3 h-3" />
+                  <span>{selectedGiftModal.gift.price}개</span>
                 </div>
               </div>
             </div>
@@ -611,9 +620,17 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                     type="button"
                     onClick={handleConfirmPurchase}
                     disabled={isProcessingGift}
-                    className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer"
+                    className="retro-btn-blue flex-2 py-2 text-xs font-pixel cursor-pointer inline-flex items-center justify-center gap-1"
                   >
-                    {isProcessingGift ? '구매 중...' : `구매하기 (🌰 ${selectedGiftModal.gift.price}개)`}
+                    {isProcessingGift ? (
+                      '구매 중...'
+                    ) : (
+                      <>
+                        <span>구매하기 (</span>
+                        <AcornIcon className="w-3.5 h-3.5" />
+                        <span>{selectedGiftModal.gift.price}개)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
