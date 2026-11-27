@@ -410,6 +410,16 @@ export const MINIROOM_GIFT_PRODUCTS: MiniroomGiftProduct[] = [
     placement: 'top',
   },
   {
+    id: 'gift-teddy-bear',
+    name: '하트 곰인형',
+    emoji: '🧸',
+    price: 5,
+    description: '사랑스러운 하트를 안고 있는 귀여운 곰인형',
+    imageUrl: '/assets/aistudio/gift_teddybear_heart_x3_de8bb1d8.png',
+    miniroomSizeClass: 'w-8 h-[39px]',
+    placement: 'bottom',
+  },
+  {
     id: 'gift-wreath-pink',
     name: '축하 화환(분홍)',
     emoji: '🌺',

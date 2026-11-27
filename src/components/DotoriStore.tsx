@@ -473,6 +473,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                         <img
                           src={gift.imageUrl}
                           alt={gift.name}
+                          referrerPolicy="no-referrer"
                           className="w-full h-full object-contain"
                           style={{ imageRendering: 'pixelated' }}
                         />
@@ -570,6 +571,7 @@ export const DotoriStore: React.FC<DotoriStoreProps> = ({
                   <img
                     src={selectedGiftModal.gift.imageUrl}
                     alt={selectedGiftModal.gift.name}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-contain"
                     style={{ imageRendering: 'pixelated' }}
                   />

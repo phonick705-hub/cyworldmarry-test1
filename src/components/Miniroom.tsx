@@ -422,6 +422,7 @@ export const Miniroom: React.FC<MiniroomProps> = ({
             src={giftImageUrl}
             alt={displayName}
             draggable={false}
+            referrerPolicy="no-referrer"
             className={`${sizeClass} object-contain select-none pointer-events-none drop-shadow-[0_2px_2px_rgba(0,0,0,0.2)]`}
             style={{ imageRendering: 'pixelated' }}
           />
@@ -718,6 +719,7 @@ export const Miniroom: React.FC<MiniroomProps> = ({
                                 <img
                                   src={prod.imageUrl}
                                   alt={displayName}
+                                  referrerPolicy="no-referrer"
                                   className="w-5 h-6 object-contain"
                                   style={{ imageRendering: 'pixelated' }}
                                 />
