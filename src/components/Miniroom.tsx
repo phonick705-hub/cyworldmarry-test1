@@ -4,7 +4,7 @@ import { bgmPlayer } from '../utils/soundSynthesizer';
 import { AcornService, DisplayedMiniroomGift } from '../services/acornService';
 import { MINIROOM_GIFT_PRODUCTS, MiniroomGiftProduct } from '../config/weddingConfig';
 import { useAuth } from '../context/AuthContext';
-import miniroomCleanBg from '../assets/images/miniroom_clean_full.jpg';
+import weddingHallMiniroomBg from '../assets/images/wedding_hall_center_couple_1795761335962.jpg';
 
 interface MiniroomProps {
   guestbookCount: number;
@@ -499,20 +499,23 @@ export const Miniroom: React.FC<MiniroomProps> = ({
         {/* Pixel Art Miniroom Artwork */}
         <div className="absolute inset-0 overflow-hidden">
           <img
-            src={miniroomCleanBg}
-            alt="재현과 하은의 싸이월드 웨딩 미니룸"
+            src={weddingHallMiniroomBg}
+            alt="재현과 하은의 싸이월드 웨딩홀 미니룸"
             draggable={false}
+            referrerPolicy="no-referrer"
             className="block w-full h-full object-cover object-center select-none pointer-events-none"
             style={{ imageRendering: 'pixelated' }}
             loading="eager"
           />
 
           {/* Subtle Couple Idle Bobbing Overlay Indicator */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-32 h-28 relative mt-16 animate-idle flex justify-center">
-              <span className="absolute -top-3 left-6 text-xs text-[#2E8BFF] animate-pulse">✦</span>
-              <span className="absolute -top-4 right-6 text-xs text-[#F4A6B7] animate-pulse">♥</span>
-            </div>
+          <div className="absolute inset-0 pointer-events-none animate-idle">
+            <span className="absolute left-[42%] top-[57%] text-xs text-[#2E8BFF] animate-pulse drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
+              ✦
+            </span>
+            <span className="absolute left-[57%] top-[57%] text-xs text-[#F4A6B7] animate-pulse drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
+              ♥
+            </span>
           </div>
         </div>
 
