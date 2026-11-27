@@ -4,7 +4,7 @@ import { bgmPlayer } from '../utils/soundSynthesizer';
 import { AcornService, DisplayedMiniroomGift } from '../services/acornService';
 import { MINIROOM_GIFT_PRODUCTS, MiniroomGiftProduct } from '../config/weddingConfig';
 import { useAuth } from '../context/AuthContext';
-import weddingHallMiniroomBg from '../assets/images/wedding_hall_center_couple_1795761335962.jpg';
+import weddingHallMiniroomBg from '../assets/images/wedding_hall_couple_up3.jpg';
 
 interface MiniroomProps {
   guestbookCount: number;
@@ -510,10 +510,10 @@ export const Miniroom: React.FC<MiniroomProps> = ({
 
           {/* Subtle Couple Idle Bobbing Overlay Indicator */}
           <div className="absolute inset-0 pointer-events-none animate-idle">
-            <span className="absolute left-[42%] top-[57%] text-xs text-[#2E8BFF] animate-pulse drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
+            <span className="absolute left-[42%] top-[53%] text-xs text-[#2E8BFF] animate-pulse drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
               ✦
             </span>
-            <span className="absolute left-[57%] top-[57%] text-xs text-[#F4A6B7] animate-pulse drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
+            <span className="absolute left-[57%] top-[53%] text-xs text-[#F4A6B7] animate-pulse drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
               ♥
             </span>
           </div>
